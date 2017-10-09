@@ -106,6 +106,9 @@ Size = _vec2_param("size", store=False)
 Size.addParseAction(pcb_obj.Size.from_tokens)
 Size = Group(Size)("size")
 
+# SizeNoGroup = _vec2_param("size", store=True)
+# SizeNoGroup.addParseAction(pcb_obj.Size.from_tokens)
+
 Size1D = _paren_stmt("size", Float())
 Size1D.addParseAction(lambda tokens: pcb_obj.Size.from_tokens(list(tokens) + [0.0]))
 #
@@ -121,6 +124,7 @@ Attr = _str_param("attr")
 #     Optional(Offset)
 # )
 Drill = _paren_stmt("drill", Float("r"))
+Drill.addParseAction(pcb_obj.Drill.from_tokens)
 
 Solder_Mask_Margin = _float_param("solder_mask_margin")
 Solder_Paste_Margin = _float_param("solder_paste_margin")
@@ -237,19 +241,22 @@ LayerDefinition = _paren_data(UnsignedInt("number") + Anystring("name") + Identi
 LayerList = _paren_stmt("layers", ZeroOrMore(LayerDefinition))
 
 # Text
-Font = _paren_stmt("font", OptionalList(Size, Thickness, Identifier("italic")))
+Justify = _str_param("justify")
+Font = _paren_stmt("font", OptionalList(Size, Thickness))
 Font.addParseAction(pcb_obj.Font.from_tokens)
-Effects = _paren_stmt("effects", Font)
+
+Effects = _paren_stmt("effects", OptionalList(Font, Justify))
 Effects.addParseAction(pcb_obj.Effects.from_tokens)
+
 FP_Text = _paren_stmt("fp_text", Identifier("kind"), Anystring("text"),
-                        OptionalList(At, Layer, Effects, Identifier("hide"))("parameters")
+                        OptionalList(At, Layer, Effects, Keyword("hide"))("parameters")
                       )("fp_text")
 FP_Text.addParseAction(pcb_obj.FP_Text.from_tokens)
 
 FP_Line = _paren_stmt("fp_line", Start, End, Layer, Width)
 FP_Line.addParseAction(pcb_obj.FP_Line.from_tokens)
 # Pad related
-Pad = _paren_stmt("pad", UnsignedInt("pin_number") + Identifier("kind") + Identifier("shape"),
+Pad = _paren_stmt("pad", Anystring("pin") + Identifier("kind") + Identifier("shape"),
                     OptionalList(At, Size, Drill, Layers, Net, Solder_Mask_Margin,
                     Solder_Paste_Margin, Solder_Paste_Margin_Ratio)
 )

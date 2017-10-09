@@ -5,9 +5,13 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from copy import copy
+
 import parse_objs
 
 def sanitize_str(s):
+    if s == "":
+        return '""'
     for char in s:
         if char in [' ', '\n', '(', ')']:
             return '"{}"'.format(s)
@@ -272,38 +276,44 @@ class Model(PCBObject):
         )
 
 class Font(PCBObject):
-    def __init__(self, size, thickness):
-        self.size = size
-        self.thickness = thickness
+    def __init__(self):
+        self.size = None
+        self.thickness = None
 
-    def generate(self):
-        return "(font {size} (thickness {thickness}))".format(
-            size = self.size.generate()
-        )
-
-class Font(PCBObject):
     @staticmethod
     def from_tokens(tokens):
         result = Font()
-        result.size = tokens.size[0]
-        result.thickness = tokens.thickness[0]
+        if tokens.size:
+            result.size = tokens.size[0]
+        if tokens.thickness:
+            result.thickness = tokens.thickness[0]
         return result
 
     def generate(self):
-        return "(font {size} (thickness {thickness}))".format(
-            size = self.size.generate(),
-            thickness = self.thickness,
-        )
+        result = "(font"
+        if self.size:
+            result += "  {}".format(self.size.generate())
+        if self.thickness:
+            result += " (thickness {})".format(self.thickness)
+        result += ")"
+        return result
 
 class Effects(PCBObject):
     @staticmethod
     def from_tokens(tokens):
         result = Effects()
-        result.font = tokens.font
+        if tokens.font:
+            result.font = tokens.font
+        else:
+            result.font = None
         return result
 
     def generate(self):
-        return "(effects {font})".format(font = self.font.generate())
+        result = "(effects"
+        if self.font:
+            result += " {}".format(self.font.generate())
+        result += ")"
+        return result
 
 class FP_Text(PCBObject):
     # def __init__(self, text, kind, pos, layer='F.SilkS', width=0.1):
@@ -381,6 +391,12 @@ class Module(PCBObjectContainer):
         return parse_objs.Module.parseString(text).module
 
     @staticmethod
+    def from_file(file_name):
+        text = None
+        with open(file_name) as mod_file:
+            return Module.from_str(mod_file.read())
+
+    @staticmethod
     def from_tokens(tokens):
         result = Module()
         result.component = tokens.component
@@ -419,11 +435,24 @@ class Module(PCBObjectContainer):
         result += "\n" + indent_str + ")"
         return result
 
+    def place(self, x, y):
+        result = copy(self)
+        result.pos = Pos(x, y)
+        return result
+
+
 class Drill(PCBObject):
     def __init__(self, x, y=None, offset=None):
         self.x = x
         self.y = y
         self.offset = offset
+
+    @staticmethod
+    def from_tokens(tokens):
+        result = Drill(None)
+        if tokens.r:
+            result.x = tokens.r
+        return result
 
     def generate(self):
         result = "(drill "
@@ -525,7 +554,7 @@ class RectDelta(PCBObject):
 
 class Pad(PCBObject):
     def __init__(self):
-        self.pin_number = None
+        self.pin = ""
         self.kind = None
         self.shape = None
         self.net = None
@@ -538,7 +567,7 @@ class Pad(PCBObject):
     @staticmethod
     def from_tokens(tokens):
         result = Pad()
-        result.pin_number = tokens.pin_number
+        result.pin = tokens.pin
         result.kind = tokens.kind
         result.shape = tokens.shape
         if tokens.at:
@@ -557,8 +586,8 @@ class Pad(PCBObject):
 
     def generate(self, indent_depth=0):
         indent_str = gen_indent(indent_depth)
-        result = indent_str + "(pad {net} {kind} {shape} {pos}".format(
-            net = self.pin_number,
+        result = indent_str + "(pad {pin} {kind} {shape} {pos}".format(
+            pin = sanitize_str(self.pin),
             kind = self.kind,
             shape = self.shape,
             pos = self.pos.generate(),
@@ -587,22 +616,15 @@ class Pad(PCBObject):
         )
 
 if __name__ == "__main__":
-    mod = None
-    with open("test.pretty/R_0805.kicad_mod") as mod_file:
-        mod = Module.from_str(mod_file.read())
-    # print(mod.component, type(mod), mod.pos.x, mod.pos.y, type(mod.pos))
-    # print(mod.description, mod.tags, mod.attr)
-    # print(mod.objects)
-    # for obj in mod.objects:
-    #     print(obj)
-
-
-    from copy import copy
+    smd_r = Module.from_file("test.pretty/R_0805.kicad_mod")
+    switch = Module.from_file("test.pretty/Cherry_MX_Matias.kicad_mod")
 
     newPCB = PCBDocument()
-    mod.pos = Pos(30.0, 30.0)
-    newPCB += copy(mod)
-    mod.pos = Pos(100.0, 100.0)
-    newPCB += mod
+    for i in range(8):
+        for j in range(8):
+            x,y = (20 + 19*i, 20 + 19*j)
+            newPCB += switch.place(x, y)
+            newPCB += smd_r.place(x, y+5)
+
     with open("test_pcb.kicad_pcb", "w") as out_file:
         out_file.write(newPCB.generate())
