@@ -294,14 +294,14 @@ class PCBBuilder(object):
 
 
 
-def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, plate_only=False):
+def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0,
+             plate_only=False, alpha_factor=0.07, alpha_point_density=0):
     scad_morphology_path = os.path.join("scad-utils", "morphology.scad")
     use(scad_morphology_path)
 
     keyboard = kle.Keyboard.from_json(json_layout, spacing=spacing)
     kb_pcb = PCBBuilder()
 
-    outline_hull_list = []
     outline_point_set = set()
 
     up_x = math.inf
@@ -317,25 +317,19 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, pla
             dv = point2 - point1
 
             for (i, t) in enumerate(np.linspace(0, 1.0, n+2)):
-                if i == 0 or i == n+1:
-                    continue
                 result.add(point1 + (float(t)*dv))
             return result
 
         points = key.get_rect_points()
 
-        a = set(points)
         outline_point_set.update(set(points))
 
-        if key.u_w() > 1:
-            n_w = math.floor(key.u_w())
-            outline_point_set.update(add_points(points[0], points[1], n_w))
-            outline_point_set.update(add_points(points[2], points[3], n_w))
-
-        if key.u_h() > 1:
-            n_h = math.floor(key.u_h())
-            outline_point_set.update(add_points(points[0], points[3], n_h))
-            outline_point_set.update(add_points(points[1], points[2], n_h))
+        n_w = math.floor(key.u_w()) + alpha_point_density
+        outline_point_set.update(add_points(points[0], points[1], n_w))
+        outline_point_set.update(add_points(points[2], points[3], n_w))
+        n_h = math.floor(key.u_h()) + alpha_point_density
+        outline_point_set.update(add_points(points[0], points[3], n_h))
+        outline_point_set.update(add_points(points[1], points[2], n_h))
 
 
         for point in key.get_rect_points():
@@ -347,17 +341,6 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, pla
             bot_x = max(point.x, bot_x)
             bot_y = max(point.y, bot_y)
 
-        outline_hull_list.append(
-            translate([key.x(), key.y(),0]) (
-                rotate([0,0,key.r()]) (
-                    square([key.w(), key.h()])
-                )
-            )
-        )
-
-
-    outline_hull_list.append(translate([120, 20, 0])(square([16, 16])))
-
     size_x = abs(bot_x - up_x) + margin
     size_y = abs(bot_y - up_y) + margin
 
@@ -367,10 +350,14 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, pla
 
     top_plate_thickness = 5
 
+
     # print(outline_hull.vertices)
     # print(outline_point_set)
     outline_point_list = list(outline_point_set)
-    _, perimeter = alpha_shape.alpha_shape(0.07, outline_point_list)
+
+    # print(len(outline_point_list), outline_point_list, len(outline_point_list))
+
+    _, perimeter = alpha_shape.alpha_shape(alpha_factor, outline_point_list)
     # alpha_shape.draw(outline_indices, outline_point_set)
 
     # outline_verts = []
@@ -410,7 +397,7 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, pla
         corner_raidus = 3
         segs = 50
         case_outline = linear_extrude(top_plate_thickness)(
-            fillet(r=corner_raidus*3, segments=segs)(
+            fillet(r=corner_raidus, segments=segs)(
                 rounding(r=corner_raidus, segments=segs)(
                     outline_poly
                 )
@@ -432,7 +419,6 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, pla
     bot_case = None
 
     if 0:
-        top_plate = linear_extrude(top_plate_thickness)(hull()(outline_hull_list))
         bot_case = translate([0, 0, -thickness])(top_plate)
     else:
         top_plate = translate([up_x-margin/2, up_y-margin/2, 0])(case_outline)
@@ -464,18 +450,22 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, pla
 
     # define lid outline, case bottom lid
     lid_thickness = 1.5
-    # bot_case_lid = translate([bot_x, bot_y, 0])(
-    #     cube([bot_size_x, bot_size_y, lid_thickness])
-    # )
-
-    # lid_center_offset = (0, -100)
-
-    bot_case_lid  = linear_extrude(lid_thickness)(
-            translate([2.3,1.8, 0])(scale([0.97 - 0.0015, 0.95 - 0.0015, 1.00])(
-                (hull()(outline_hull_list))
+    bot_case_lid = translate([bot_x, bot_y, 0])(
+        linear_extrude(lid_thickness)(
+            inset(d=2.5)(
+                case_outline2
             )
         )
     )
+
+    # lid_center_offset = (0, -100)
+
+    # bot_case_lid  = linear_extrude(lid_thickness)(
+    #         translate([2.3,1.8, 0])(scale([0.97 - 0.0015, 0.95 - 0.0015, 1.00])(
+    #             (hull()(outline_hull_list))
+    #         )
+    #     )
+    # )
 
     # take cavity out of botcase
     body = None
@@ -503,7 +493,8 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0, pla
         # all_holes += create_hole(pos_x, pos_y)
         hole_list.append(create_hole(x, y, angle, top_plate_thickness, hole_size=hole_size))
 
-    body -= union()(hole_list)
+    body -= union()(translate([0, -14, 0])(hole_list))
+    # body -= union()(translate([0, 0, 0])(hole_list))
 
     # a = translate([lid_center_offset[0], lid_center_offset[1], 0])(
     #     bot_case_lid
@@ -564,6 +555,14 @@ if __name__ == "__main__":
     parser.add_argument('--spacing', type=float, action='store',
                         default=19.0,
                         help='The spacing between the switches (center-to-center)'),
+    parser.add_argument('--alpha', type=float, action='store',
+                        default=0.07,
+                        help='Value used when generating the case outline. '
+                        'Use smaller values for a more "convex shape."'),
+    parser.add_argument('--alpha-density', type=int, action='store',
+                        default=1,
+                        help="Increases the point density for the case outline "
+                        "algorithm."),
 
     args = parser.parse_args()
 
@@ -576,6 +575,8 @@ if __name__ == "__main__":
                          spacing=args.spacing,
                          hole_size=args.hole_size,
                          margin=0,
+                         alpha_factor=args.alpha,
+                         alpha_point_density=args.alpha_density,
                          )
 
     print(scad_code)

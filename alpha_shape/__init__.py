@@ -219,7 +219,7 @@ def alpha_shape(alpha, points):
         area_squared_times_16 = \
             4 * (a_2*b_2 + a_2*c_2 + b_2*c_2) - (a_2 + b_2 + c_2)**2
 
-        circum_r_2 = a_2*b_2*c_2 / (area_squared_times_16)
+        circum_r_2 = a_2*b_2*c_2 / (area_squared_times_16 + epsilon)
 
         # Here's the radius filter.
         if circum_r_2 < (1.0/alpha)**2:
