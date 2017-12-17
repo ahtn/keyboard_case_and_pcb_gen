@@ -5,9 +5,10 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from copy import copy
+import copy
 
-import parse_objs
+# import parse_objs
+import re
 
 def sanitize_str(s):
     if s == "":
@@ -19,6 +20,23 @@ def sanitize_str(s):
 
 def gen_indent(depth):
     return "  " * depth
+
+
+def flipped_layer_str(layer_str):
+        matches = re.match("([FB])\.(.*)", layer_str)
+        if not matches:
+            return layer_str
+
+        layer_side = matches.group(1)
+        layer_name = matches.group(2)
+
+        layer_side = {
+            'F': 'B',
+            'B': 'F',
+        }[layer_side]
+
+        return layer_side + '.' + layer_name
+
 
 class PCBObject(object):
     pass
@@ -253,26 +271,26 @@ class Model(PCBObject):
     def from_tokens(tokens):
         result = Model()
         result.path = tokens.path
-        result.pos = tokens.at[0]
-        result.scale = tokens.scale[0]
-        result.rotate = tokens.rotate[0]
+        result.pos3d = tokens.at3d[0]
+        result.scale3d = tokens.scale3d[0]
+        result.rotate3d = tokens.rotate3d[0]
         return result
 
     def __str__(self):
         return "Model({}, pos={}, scale={}, rotate={})".format(
             self.path,
-            self.pos,
-            self.scale,
-            self.rotate
+            self.pos3d,
+            self.scale3d,
+            self.rotate3d
         )
 
     def generate(self, indent_depth=0):
         indent_str = gen_indent(indent_depth)
         return indent_str + "(model {path} {pos} {scale} {rotate})".format(
             path = sanitize_str(self.path),
-            pos = self.pos.gen_pos(),
-            scale = self.scale.gen_scale(),
-            rotate = self.rotate.gen_rotate(),
+            pos = self.pos3d.gen_pos(),
+            scale = self.scale3d.gen_scale(),
+            rotate = self.rotate3d.gen_rotate(),
         )
 
 class Font(PCBObject):
@@ -340,20 +358,24 @@ class FP_Text(PCBObject):
             effects = self.effects.generate(),
         )
 
+    def flip(self):
+        new_layer = flipped_layer_str(self.layer)
+        if new_layer:
+            self.layer = new_layer
+        self.pos.y *= -1
 
-class FP_Line(PCBObject):
-    def __init__(self):
-    # def __init__(self, start, end, layer='F.SilkS', width=0.1):
-        # """@todo: to be defined1. """
-        # self.start = start
-        # self.end = end
-        # self.layer = layer
-        # self.width = width
-        pass
+
+class LineCommon(PCBObject):
+    def __init__(self, keyword, start=[0.0, 0.0], end=[0.0, 0.0], layer='F.SilkS', width=0.15):
+        self.start = Pos(start[0], start[1])
+        self.end = Pos(end[0], end[1])
+        self.layer = layer
+        self.width = width
+        self._keyword = keyword
 
     @staticmethod
-    def from_tokens(tokens):
-        result = FP_Line()
+    def from_tokens(keyword, tokens):
+        result = LineCommon(keyword)
         if tokens.start:
             result.start = tokens.start[0]
         else:
@@ -368,15 +390,39 @@ class FP_Line(PCBObject):
 
     def generate(self, indent_depth=0):
         indent_str = gen_indent(indent_depth)
-        return indent_str + "(fp_line {start} {end} (layer {layer}) (width {width}))".format(
+        return indent_str + "({keyword} {start} {end} (layer {layer}) (width {width}))".format(
+            keyword = self._keyword,
             start = self.start.gen_start(),
             end = self.end.gen_end(),
             layer=self.layer,
             width=self.width,
         )
 
+    def flip(self):
+        self.layer = flipped_layer_str(self.layer)
+        self.start.y *= -1
+        self.end.y *= -1
+
+
     def __str__(self):
-        return "FP_Line({}, {}, {}, {})".format(self.start, self.end, self.layer, self.width)
+        return "{}({}, {}, {}, {})".format(self._keyword, self.start, self.end, self.layer, self.width)
+
+class FP_Line(LineCommon):
+    def __init__(self, start=[0.0,0.0], end=[0.0,0.0], layer='F.Cu', width=0.15):
+        super(FP_Line, self).__init__("fp_line", start=start, end=end, layer=layer, width=width)
+
+    @staticmethod
+    def from_tokens(tokens):
+        return LineCommon.from_tokens("fp_line", tokens)
+
+class GR_Line(LineCommon):
+    def __init__(self, start=[0.0,0.0], end=[0.0,0.0], layer='F.SilkS', width=0.15):
+        super(GR_Line, self).__init__("gr_line", start=start, end=end, layer=layer, width=width)
+        self.generate()
+
+    @staticmethod
+    def from_tokens(tokens):
+        return LineCommon.from_tokens("gr_line", tokens)
 
 class Module(PCBObjectContainer):
     def __init__(self):
@@ -385,16 +431,6 @@ class Module(PCBObjectContainer):
         self.tags = None
         self.attr = None
         self.layer = None
-
-    @staticmethod
-    def from_str(text):
-        return parse_objs.Module.parseString(text).module
-
-    @staticmethod
-    def from_file(file_name):
-        text = None
-        with open(file_name) as mod_file:
-            return Module.from_str(mod_file.read())
 
     @staticmethod
     def from_tokens(tokens):
@@ -414,6 +450,17 @@ class Module(PCBObjectContainer):
             result.layer = tokens.layer[0]
         result._add_token_objects(tokens)
         return result
+
+    @staticmethod
+    def from_str(text):
+        from pykicad.pcbnew_parser import ModuleTok
+        return ModuleTok.parseString(text).module
+
+    @staticmethod
+    def from_file(file_name):
+        with open(file_name) as mod_file:
+            return Module.from_str(mod_file.read())
+
 
     def generate(self, indent_depth=0):
         indent_str = gen_indent(indent_depth)
@@ -435,10 +482,39 @@ class Module(PCBObjectContainer):
         result += "\n" + indent_str + ")"
         return result
 
-    def place(self, x, y):
-        result = copy(self)
+    def place(self, x, y, a=0.0, flip=False, ref="REF**"):
+        result = copy.deepcopy(self)
         result.pos = Pos(x, y)
+
+        for obj in result.objects:
+            if type(obj) == FP_Text and obj.kind == "reference":
+                obj.text = ref
+
+        if flip:
+            result.flip()
+            a += 180.0
+
+        if a != 0.0:
+            result.set_angle(a)
+
         return result
+
+    def flip(self):
+        self.layer = flipped_layer_str(self.layer)
+
+        for obj in self.objects:
+            if hasattr(obj, "flip"):
+                obj.flip()
+
+    def set_angle(self, angle):
+        old_angle = self.pos.a
+        self.pos.a = angle
+
+        angle_adj = angle - old_angle
+
+        for obj in self.objects:
+            if hasattr(obj, "pos"):
+                obj.pos.a += angle_adj
 
 
 class Drill(PCBObject):
@@ -507,18 +583,31 @@ class Offset(PCBObjectVec):
         return "(offset {} {})".format(self.pos[0], self.pos[1])
 
 class Pos(PCBObjectVec):
+    def __init__(self, x=0.0, y=0.0, a=0.0):
+        super(Pos, self).__init__(x, y)
+        self.a = a
+
     @staticmethod
     def from_tokens(tokens):
-        return Pos(tokens[0], tokens[1])
+        a = 0.0
+        if len(tokens) > 2:
+            a = tokens[2]
+        return Pos(tokens[0], tokens[1], a)
 
     def generate(self):
-        return "(at {} {})".format(self.x, self.y)
+        if self.a != 0.0:
+            return "(at {} {} {})".format(self.x, self.y, self.a)
+        else:
+            return "(at {} {})".format(self.x, self.y)
 
     def gen_start(self):
         return "(start {} {})".format(self.x, self.y)
 
     def gen_end(self):
         return "(end {} {})".format(self.x, self.y)
+
+    def __str__(self):
+        return "Pos({}, {}, {})".format(self.x, self.y, self.a)
 
 class Vec3(PCBObjectVec3):
     @staticmethod
@@ -607,7 +696,7 @@ class Pad(PCBObject):
 
     def __str__(self):
         return "Pad({}, {}, {}, {}, {}, {})".format(
-            self.pin_number,
+            self.pin,
             self.kind,
             self.shape,
             self.pos,
@@ -615,16 +704,30 @@ class Pad(PCBObject):
             self.layers,
         )
 
+    def flip(self):
+        self.layers = [flipped_layer_str(s) for s in self.layers]
+        self.pos.y *= -1
+
 if __name__ == "__main__":
     smd_r = Module.from_file("test.pretty/R_0805.kicad_mod")
     switch = Module.from_file("test.pretty/Cherry_MX_Matias.kicad_mod")
 
     newPCB = PCBDocument()
-    for i in range(8):
-        for j in range(8):
+    for i in range(5):
+        for j in range(1):
             x,y = (20 + 19*i, 20 + 19*j)
-            newPCB += switch.place(x, y)
-            newPCB += smd_r.place(x, y+5)
+            ref = "SW_{}_{}".format(i, j)
+            if i == 0:
+                newPCB += switch.place(x, y, ref=ref)
+            if i == 1:
+                newPCB += switch.place(x, y, flip=True, ref=ref)
+            elif i == 2:
+                newPCB += switch.place(x, y, a=45, ref=ref)
+            elif i == 3:
+                newPCB += switch.place(x, y, a=45, flip=True, ref=ref)
+            else:
+                newPCB += switch.place(x, y, ref=ref)
+            # newPCB += smd_r.place(x, y+5)
 
     with open("test_pcb.kicad_pcb", "w") as out_file:
         out_file.write(newPCB.generate())
