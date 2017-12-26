@@ -7,13 +7,14 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 from solid import *
 import os
+import sys
 import math
-from math import (cos, sin)
 import numpy as np
 
 import alpha_shape
 from pykicad import pcbnew
 import kle
+import directives
 
 def switch_hole_local(thickness, spacing=19.0, hole_size=14.0, hole_extra=0.0):
     # switch hole
@@ -63,7 +64,7 @@ def switch_hole_local(thickness, spacing=19.0, hole_size=14.0, hole_extra=0.0):
     return [main_switch_hole, clip_0, clip_1, clip_2, clip_3]
 
 
-def create_hole(pos_x, pos_y, angle, thickness, spacing=19.0, hole_size=14.0,
+def create_switch_hole(pos_x, pos_y, angle, thickness, spacing=19.0, hole_size=14.0,
                 hole_extra=0.0):
     hole = (
         switch_hole_local(thickness,
@@ -76,12 +77,58 @@ def create_hole(pos_x, pos_y, angle, thickness, spacing=19.0, hole_size=14.0,
 
 def create_hex_hole(pos_x, pos_y, size, thickness, angle=0.0):
 
-    outside_circle_r = size / sqrt(3)
+    outside_circle_r = size / math.sqrt(3)
     hex_hole = render()(
         cylinder(r=outside_circle_r, h=thickness, segments=6)
     )
 
-    return translate([pos_x, pos_y, 0])(rotate([0, 0, angle])((hex_hole)))
+    return translate([pos_x, pos_y, 0])(
+        rotate([0, 0, angle])(
+            hex_hole
+        )
+    )
+
+def create_screw_hole(pos_x, pos_y, radius, thickness):
+
+    screw_hole = render()(
+        cylinder(r=radius, h=thickness, segments=20)
+    )
+
+    return translate([pos_x, pos_y, 0])(
+        screw_hole
+    )
+
+class HoleBuilder(object):
+    def __init__(self, top_plate_thickness=5.0, pcb_thickness=1.6):
+        self.top_plate_thickness = top_plate_thickness
+        self.pcb_thickness = pcb_thickness
+
+    def create_usb_c_hole(self, pos_x, pos_y, pos_z=0, flip=False):
+        l = 9.3
+        w = 3.4
+        h = 10
+        corner_raidus = 0.8
+        segs = 10
+
+
+        port_hole = render()(
+            rotate([-90, 0, 0])(
+                linear_extrude(height=h, center=True)(
+                    rounding(r=corner_raidus, segments=segs)(
+                        square([l, w], center=True)
+                    )
+                )
+            )
+        )
+
+
+        z_offset = -self.pcb_thickness - w/2
+        if flip:
+            z_offset = +w/2
+
+        return translate([pos_x, pos_y, pos_z + z_offset])(
+            port_hole
+        )
 
 def create_case_screw(pos_x, pos_y):
     m3_screw_r = 3.0 / 2
@@ -295,7 +342,8 @@ class PCBBuilder(object):
 
 
 def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0,
-             plate_only=False, alpha_factor=0.07, alpha_point_density=0):
+             plate_only=False, alpha_factor=0.07, alpha_point_density=0,
+             pcb_thickness=1.6):
     scad_morphology_path = os.path.join("scad-utils", "morphology.scad")
     use(scad_morphology_path)
 
@@ -351,11 +399,8 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0,
     top_plate_thickness = 5
 
 
-    # print(outline_hull.vertices)
-    # print(outline_point_set)
     outline_point_list = list(outline_point_set)
 
-    # print(len(outline_point_list), outline_point_list, len(outline_point_list))
 
     _, perimeter = alpha_shape.alpha_shape(alpha_factor, outline_point_list)
     # alpha_shape.draw(outline_indices, outline_point_set)
@@ -369,14 +414,12 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0,
     path = []
     last_pos = None
     for edge in perimeter:
-        # print(last_pos, edge)
         if last_pos == edge[0]:
             path.append(list(outline_point_list[edge[0]]))
             last_pos = edge[1]
         else:
             path.append(list(outline_point_list[edge[1]]))
             last_pos = edge[0]
-    # print(path)
     outline_poly = polygon(points=path)
     kb_pcb.add_edge_cuts(path)
 
@@ -475,13 +518,19 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0,
         body = (top_plate + bot_case) - bot_case_cavity
 
     hole_list = []
+    add_list = []
 
     # features that need to be added and subtracted from the lid
     lid_add_list = []
     lid_del_list = []
 
+    dParser = directives.DirectiveParser()
+    hole_builder = HoleBuilder(top_plate_thickness=thickness,
+                               pcb_thickness=pcb_thickness)
+
     for (i, key) in enumerate(keyboard.get_keys()):
-        x, y = key.get_center()
+        key_pos = key.get_center()
+        x, y = key_pos
         w, h = key.w(), key.h()
         angle = key.r()
 
@@ -490,9 +539,56 @@ def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0,
             spacing=spacing
         )
 
-        # all_holes += create_hole(pos_x, pos_y)
-        hole_list.append(create_hole(x, y, angle, top_plate_thickness, hole_size=hole_size))
 
+        for (leg_pos, legend) in key.get_legend_list():
+            leg_offset = kle.Point(leg_pos[0], leg_pos[1]) * spacing/2
+            try:
+                directive_list = dParser.parse_str(legend)
+            except Exception as err:
+                print("Warning: failed to parse directive: " + str(err), file=sys.stderr)
+
+            for directive in directive_list:
+                dir_offset = kle.Point(*directive.get_offset())
+                item_pos = key_pos + leg_offset + dir_offset
+
+                if type(directive) == directives.HexDirective:
+                    if  directive.top:
+                        hole_list.append(
+                            create_hex_hole(
+                                item_pos.x,
+                                item_pos.y,
+                                directive.size,
+                                thickness,
+                                angle=directive.r
+                            )
+                        )
+                elif type(directive) == directives.ScrewDirective:
+                    if directive.top:
+                        hole_list.append(
+                            create_screw_hole(
+                                item_pos.x,
+                                item_pos.y,
+                                radius = directive.size / 2,
+                                thickness = thickness,
+                            )
+                        )
+                elif type(directive) == directives.USBCDirective:
+                    if directive.top:
+                        hole_list.append(
+                            hole_builder.create_usb_c_hole(
+                                item_pos.x,
+                                item_pos.y,
+                                flip=directive.flip,
+                                pos_z=directive.z,
+                            )
+                        )
+                else:
+                    print("Warning> Unknown directive: {}".format(directive), file=sys.stderr)
+
+        # all_holes += create_switch_hole(pos_x, pos_y)
+        hole_list.append(create_switch_hole(x, y, angle, top_plate_thickness, hole_size=hole_size))
+
+    body += union()(translate([0, -14, 0])(add_list))
     body -= union()(translate([0, -14, 0])(hole_list))
     # body -= union()(translate([0, 0, 0])(hole_list))
 
@@ -549,7 +645,10 @@ if __name__ == "__main__":
     parser.add_argument('--thickness', type=float, action='store',
                         default=5.0,
                         help='The thickness of the plate'),
-    parser.add_argument('--hole_size', type=float, action='store',
+    parser.add_argument('--pcb-thickness', type=float, action='store',
+                        default=1.6,
+                        help='The thickness of the pcb'),
+    parser.add_argument('--switch-hole-size', type=float, action='store',
                         default=14.0,
                         help='The size of the switch holes'),
     parser.add_argument('--spacing', type=float, action='store',
@@ -573,10 +672,11 @@ if __name__ == "__main__":
     scad_code = test_kle(json_layout,
                          args.thickness,
                          spacing=args.spacing,
-                         hole_size=args.hole_size,
+                         hole_size=args.switch_hole_size,
                          margin=0,
                          alpha_factor=args.alpha,
                          alpha_point_density=args.alpha_density,
+                         pcb_thickness=args.pcb_thickness,
                          )
 
     print(scad_code)

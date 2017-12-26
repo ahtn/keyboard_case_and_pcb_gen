@@ -1,15 +1,15 @@
 [
   [
     "",
-    ""
+    "\n\n\n\n\n\n\n\nusb_c(y=-5, flip=false)"
   ],
   [
     "",
-    ""
+    "screw(\"m3\", pcb=false)"
   ],
   [
     "",
-    ""
+    "hex(4.0, r=0)"
   ],
   [
     {
@@ -29,7 +29,7 @@
       "rx": 3,
       "ry": -0.75
     },
-    ""
+    "\n\n\n\n\n\n\n\nusb_c(y=0, flip=false, z=+0.8)"
   ],
   [
     ""
@@ -50,7 +50,7 @@
       "ry": -0.25
     },
     "",
-    ""
+    "usb_c(y=-2, flip=false);usb_c(y=-2, flip=true)"
   ],
   [
     "",

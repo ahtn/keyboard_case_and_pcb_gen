@@ -8,6 +8,8 @@ import json
 import math, cmath
 from collections import namedtuple
 
+class KLEParseError(Exception):
+    pass
 
 def rotate_complex(radians):
     return cmath.exp(radians*1j)
@@ -51,9 +53,49 @@ class Point(namedtuple('Point', ('x', 'y'))):
 
 
 class Key(object):
-    """Docstring for Key. """
+    """              ( x, y )
+     0 top left      (-1, -1)
+     1 bottom left   (-1,  1)
+     2 top right     ( 1, -1)
+     3 bottom right  ( 1,  1)
+     4 front left    (-1,  2)
+     5 front right   ( 1,  2)
+     6 center left   (-1,  0)
+     7 center right  ( 1,  0)
+     8 top center    ( 0,  1)
+     9 center        ( 0,  0)
+    10 bottom center ( 0, -1)
+    11 front center  ( 0,  2)
+    """
+    TOP_LEFT = 0
+    BOT_LEFT = 1
+    TOP_RIGHT = 2
+    BOT_RIGHT = 3
+    FRONT_LEFT = 4
+    FRONT_RIGHT = 5
+    CENTER_LEFT = 6
+    CENTER_RIGHT = 7
+    TOP_CENTER = 8
+    CENTER = 9
+    BOT_CENTER = 10
+    FRONT_CENTER = 11
 
-    def __init__(self, ux, uy, uw, uh, properties=None, decal=False, spacing=19.0):
+    LEGEND_MAP = {
+        TOP_LEFT: (-1, -1),
+        BOT_LEFT: (-1,  1),
+        TOP_RIGHT: ( 1, -1),
+        BOT_RIGHT: ( 1,  1),
+        FRONT_LEFT: (-1,  2),
+        FRONT_RIGHT: ( 1,  2),
+        CENTER_LEFT: (-1,  0),
+        CENTER_RIGHT: ( 1,  0),
+        TOP_CENTER: ( 0,  -1),
+        CENTER: ( 0,  0),
+        BOT_CENTER: ( 0, 1),
+        FRONT_CENTER: ( 0,  2),
+    }
+
+    def __init__(self, ux, uy, uw, uh, text="", properties=None, decal=False, spacing=19.0):
         """@todo: to be defined1. """
         # the coordinate system
         # the offset in the coordinate system
@@ -67,9 +109,49 @@ class Key(object):
             self.properties = KbProperties()
         else:
             self.properties = copy.copy(properties)
-        self._r = properties.r
-        self._u_rx = properties.rx
-        self._u_ry = properties.ry
+        self._r = self.properties.r
+        self._u_rx = self.properties.rx
+        self._u_ry = self.properties.ry
+
+        legends = text.split("\n")
+        max_legends = len(Key.LEGEND_MAP)
+        if len(legends) > max_legends:
+            raise Exception(KLEParseError("Too many legends for key. Got {}, max is {}"
+                                          .format(len(legends), max_legends)))
+
+        self._legends = {}
+
+        for key in range(max_legends):
+            if key < len(legends):
+                self._legends[key] = legends[key]
+            else:
+                self._legends[key] = ""
+
+        for key in self._legends.keys():
+            if not key in self._legends:
+                self._legends [key] = ''
+
+    def get_legend(self, key):
+        assert(key in Key.LEGEND_MAP)
+        return self._legends[key]
+
+    def set_legend(self, key, value):
+        assert(key in Key.LEGEND_MAP)
+        assert(type(value) == str)
+        self._legends[key] = value
+
+    def get_legend_list(self):
+        result = []
+        for key in range(len(Key.LEGEND_MAP)):
+            if self._legends[key] != "":
+                result.append((Key.LEGEND_MAP[key], self._legends[key]))
+        return result
+
+    def get_legend_text(self):
+        result = ""
+        for key in range(len(Key.LEGEND_MAP)):
+            result += self._legends[key] + "\n"
+        return result.strip("\n")
 
     def x(self):
         return self._spacing * (self._u_x + self._u_rx)
@@ -189,8 +271,8 @@ class Key(object):
         if u_ry: self._u_ry = u_ry
 
     def __str__(self):
-        return "Key(ux={}, uy={}, uw={}, uh={}, r={})".format(
-            self._u_x, self._u_y, self._u_w, self._u_h, self._r
+        return "Key(legend={}, ux={}, uy={}, uw={}, uh={}, r={})".format(
+            repr(self.get_legend_text()), self._u_x, self._u_y, self._u_w, self._u_h, self._r
         )
 
     def __repr__(self):
@@ -326,13 +408,13 @@ class Keyboard(object):
         self._col = 0
         self.row += 1
 
-    def add_key(self, x=0, y=0, w=1, h=1, decal=False):
+    def add_key(self, x=0, y=0, w=1, h=1, text="", decal=False):
         self.cur_x += x
         self.cur_y += y
         pos_x = self.cur_x
         pos_y = self.cur_y
-        key = Key(pos_x, pos_y, w, h, properties=self.global_props, decal=decal,
-                  spacing=self.spacing)
+        key = Key(pos_x, pos_y, w, h, text=text, properties=self.global_props,
+                  decal=decal, spacing=self.spacing)
         self.keys.append(key)
         self.cur_x += w
         self.col += 1
@@ -359,7 +441,8 @@ class Keyboard(object):
                     w = props.w
                     h = props.h
                     d = props.decal
-                    keyboard.add_key(x, y, w, h, decal=d)
+                    key_text = key
+                    keyboard.add_key(x, y, w, h, text=key_text, decal=d)
                     # reset properties for next key
                     props = KeyProperties()
                 elif type(key) == dict:
@@ -378,6 +461,17 @@ class Keyboard(object):
 
 if __name__ == "__main__":
     import tkinter
+
+    leg1 = "0\n6\n2\n8\n9\nb\n3\n5\n1\n4\n7\na"
+    leg2 = "0\n\n\n\n\nb\n3"
+    key1 = Key(0, 0, 1, 1, leg1)
+    key2 = Key(1, 0, 1, 1, leg2)
+
+    print(key1)
+    print(key1.get_legend_list())
+
+    print(key2)
+    print(key2.get_legend_list())
 
     def tk_draw_key(can, key, offset):
         verts = key.get_rect_points()
@@ -418,5 +512,5 @@ if __name__ == "__main__":
             tk_draw_key(can, key, (100, 100))
         tkinter.mainloop()
 
-    keyboard = Keyboard.from_file("./test-dox.json")
+    keyboard = Keyboard.from_file("./test_layouts/test-dox.json")
     tk_draw_layout(keyboard)
