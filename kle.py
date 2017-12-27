@@ -48,8 +48,17 @@ class Point(namedtuple('Point', ('x', 'y'))):
     def dot_product(self, other):
         return self.x * other.x + self.y * other.y
 
+    def cross_product(self, other):
+        return self.x * other.y - self.y * other.x
+
+    def magnitude(self):
+        return math.sqrt(self.x**2 + self.y**2)
+
     def distance_to(self, other):
         return math.hypot((self.x - other.x), (self.y - other.y))
+
+    def normalize(self):
+        return Point(self.x, self.y) / self.magnitude()
 
 
 class Key(object):

@@ -6,6 +6,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from scipy.spatial import Delaunay
 import numpy as np
 import math
+import sys
 
 def check_alpha_disk(alpha, v0, v1, points):
     if alpha == 0.0:
@@ -138,6 +139,9 @@ def draw(edges, points, alpha = None):
     plt.show()
 
 def sort_perimeter(edges):
+    """
+    From a list of edges, output a list of vertex indices
+    """
     lookup_table = {}
 
     def add_edge(edge):
@@ -173,12 +177,39 @@ def sort_perimeter(edges):
 
         if current_point == start_point:
             break;
+
+
+    # check the winding of the path
+    winding = 0
+    last_point = result[-1]
+
+    i = 0
+    while i < len(result):
+        if result[i-1] == result[i]:
+            result.pop(i)
+            continue
+        else:
+            last_point = result[i-1]
+            point = result[i]
+            winding += (point[0] - last_point[0]) * (point[1] + last_point[1])
+            i += 1
+
+    if winding > 0:
+        # force anticlockwise winding
+        result.reverse()
+
     return result
 
 
 def alpha_shape(alpha, points):
-    # based of code from
-    # https://sgillies.net/2012/10/13/the-fading-shape-of-alpha.html
+    """
+    Returns (triangles, perimeter)
+    triangles: the triangles use to construct the alpha shape
+    perimeter: the perimeter of the alpha shape in the anticlockwise direction
+
+    based of code from
+    https://sgillies.net/2012/10/13/the-fading-shape-of-alpha.html
+    """
     triangles = set()
     alpha_shape_edges = {}
 

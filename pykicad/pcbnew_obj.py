@@ -9,6 +9,7 @@ import copy
 
 # import parse_objs
 import re
+import sys
 
 def sanitize_str(s):
     if s == "":
@@ -37,6 +38,31 @@ def flipped_layer_str(layer_str):
 
         return layer_side + '.' + layer_name
 
+def generate_paren_value(value):
+    if isinstance(value, str):
+        return sanitize_str(value)
+    elif isinstance(value, (int, float)):
+        return str(value)
+    elif isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            return ""
+        else:
+            return generate_paren_value(value[0]) + generate_paren_value(value[1:])
+
+def generate_paren_statement(key, value):
+    return "({} {})".format(key, generate_paren_value(value))
+
+
+class PCBObjectTypeError(object):
+    def __init__(self, field, got_type, want_type):
+        self.field = field
+        self.got_type = got_type
+        self.want_type = want_type
+
+    def __str__(self):
+        return "Expected type for field '{}' is '{}' but got a '{}'".format(
+            self.field, self.want_type, self.got_type
+        )
 
 class PCBObject(object):
     pass
@@ -61,7 +87,7 @@ class PCBObjectContainer(object):
 
     def gen_objects(self, indent_depth=0):
         iter_obj = iter(self.objects)
-        indent_str = gen_indent(indent_depth)
+        # indent_str = gen_indent(indent_depth)
         indent_depth += 1
         result = next(iter_obj).generate(indent_depth=indent_depth)
         for obj in iter_obj:
@@ -73,6 +99,7 @@ class PCBDocument(PCBObjectContainer):
         super(PCBDocument, self).__init__()
         self.version = version
         self.host = host
+        self.general = PCBGeneral()
 
     def generate(self, indent_depth=0):
         # TODO: check what host field is used for
@@ -80,16 +107,62 @@ class PCBDocument(PCBObjectContainer):
             version = self.version,
             host = self.host
         )
+        result += "\n"
+        result += self.general.generate()
+        result += "\n"
         result += self.gen_objects(indent_depth=indent_depth)
         result += "\n)"
         return result
 
-class General(PCBObject):
-    def __init__(self):
-        pass # TODO
+class PCBGeneral(PCBObject):
+    OPTION_MAP = {
+        'links': int,
+        'no_connects': int,
+        'area': (float, float, float, float),
+        'thickness': float,
+        'drawings': int,
+        'tracks': int,
+        'zones': int,
+        'modules': int,
+        'nets': int,
+    }
+
+    def __init__(self, options={}):
+        self._options = options
+
+        for field in self._options:
+            got_type = type(self._options[field])
+            want_type = self.OPTION_MAP[field]
+            if field in self.OPTION_MAP:
+                type_mismatch = False
+                if isinstance(want_type, (tuple, list)):
+                    for (i, _) in enumerate(want_type):
+                        if type(self._options[field][i]) != want_type[i]:
+                            type_mismatch = True
+                            break;
+                else:
+                    type_mismatch = got_type == want_type
+
+                if type_mismatch:
+                    raise PCBObjectTypeError(field, got_type, want_type)
+            elif not field in self.OPTION_MAP:
+                print(
+                    "Warning: unknown field '{}' in 'general' object".format(
+                        field
+                    ),
+                    file=sys.stderr
+                )
+
+    def set_thickness(self, value):
+        assert(isinstance(value, (int, float)) and value > 0)
+        self._options['thickness'] = value
 
     def generate(self):
-        return ""
+        result = "(general \n"
+        for key in self._options.keys():
+            result += generate_paren_statement(key, self._options[key]) + "\n"
+        result += ")"
+        return result
 
 class Page(PCBObject):
     def __init__(self, page="A4"):

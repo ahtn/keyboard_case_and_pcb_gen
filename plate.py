@@ -67,24 +67,31 @@ def switch_hole_local(thickness, spacing=19.0, hole_size=14.0, hole_extra=0.0):
 def create_switch_hole(pos_x, pos_y, angle, thickness, spacing=19.0, hole_size=14.0,
                 hole_extra=0.0):
     hole = (
-        switch_hole_local(thickness,
+        switch_hole_local(thickness + 0,
                           spacing=spacing,
                           hole_size=hole_size,
                           hole_extra=hole_extra)
     )
-    return translate([pos_x, pos_y, 0])(rotate([0, 0, angle])(
+    return translate([pos_x, pos_y, -0])(rotate([0, 0, angle])(
         translate([-hole_size/2, -hole_size/2, 0])(hole)))
 
-def create_hex_hole(pos_x, pos_y, size, thickness, angle=0.0):
+def create_hex_hole(pos_x, pos_y, size, thickness, pos_z=0.0, angle=0.0):
 
     outside_circle_r = size / math.sqrt(3)
     hex_hole = render()(
         cylinder(r=outside_circle_r, h=thickness, segments=6)
     )
 
-    return translate([pos_x, pos_y, 0])(
+    return translate([pos_x, pos_y, pos_z])(
         rotate([0, 0, angle])(
             hex_hole
+        )
+    )
+
+def create_rect_hole(pos_x, pos_y, l, w, h, pos_z=0.0, angle=0.0):
+    return translate([pos_x, pos_y, pos_z + h/2])(
+        rotate([0, 0, angle])(
+            cube([l, w, h], center=True)
         )
     )
 
@@ -278,7 +285,7 @@ def create_mid_key_usb_c_hole(pos_x, pos_y, top_plate_thickness):
 
 class PCBBuilder(object):
 
-    def __init__(self):
+    def __init__(self, pcb_thickness=1.6):
         switch      = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_NoSilk_Back.kicad_mod")
         switch_1    = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u1_NoSilk_Back.kicad_mod")
         switch_1_25 = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u1.25_NoSilk_Back.kicad_mod")
@@ -306,6 +313,8 @@ class PCBBuilder(object):
         self.sw_ref_counter = 0
 
         self.pcb = pcbnew.PCBDocument()
+
+        self.pcb.general.set_thickness(pcb_thickness)
 
     def add_switch(self, x, y, w, h, r, ref="SW{}", spacing=19.0):
         key_u = w / spacing
@@ -340,299 +349,323 @@ class PCBBuilder(object):
         return self.pcb.generate()
 
 
+class KeyboardBuilder(object):
 
-def test_kle(json_object, thickness, spacing=19.0, hole_size=14.0, margin=0,
-             plate_only=False, alpha_factor=0.07, alpha_point_density=0,
-             pcb_thickness=1.6):
-    scad_morphology_path = os.path.join("scad-utils", "morphology.scad")
-    use(scad_morphology_path)
+    def __init__(self, json_object, options):
+        self.opt = options
 
-    keyboard = kle.Keyboard.from_json(json_layout, spacing=spacing)
-    kb_pcb = PCBBuilder()
+        self.kle_layout = kle.Keyboard.from_json(json_layout, spacing=self.opt.spacing)
+        self.kb_pcb = PCBBuilder(self.opt.pcb_thickness)
 
-    outline_point_set = set()
-
-    up_x = math.inf
-    up_y = math.inf
-    bot_x = -math.inf
-    bot_y = -math.inf
-
-
-    for key in keyboard.get_keys():
-
-        def add_points(point1, point2, n):
-            result = set()
-            dv = point2 - point1
-
-            for (i, t) in enumerate(np.linspace(0, 1.0, n+2)):
-                result.add(point1 + (float(t)*dv))
-            return result
-
-        points = key.get_rect_points()
-
-        outline_point_set.update(set(points))
-
-        n_w = math.floor(key.u_w()) + alpha_point_density
-        outline_point_set.update(add_points(points[0], points[1], n_w))
-        outline_point_set.update(add_points(points[2], points[3], n_w))
-        n_h = math.floor(key.u_h()) + alpha_point_density
-        outline_point_set.update(add_points(points[0], points[3], n_h))
-        outline_point_set.update(add_points(points[1], points[2], n_h))
-
-
-        for point in key.get_rect_points():
-            # print (point, up_x, up_y, bot_x, bot_y)
-
-            up_x = min(point.x, up_x)
-            up_y = min(point.y, up_y)
-
-            bot_x = max(point.x, bot_x)
-            bot_y = max(point.y, bot_y)
-
-    size_x = abs(bot_x - up_x) + margin
-    size_y = abs(bot_y - up_y) + margin
-
-    # case outline ("rectangular", "cylinder", "spherical")
-    corner_type = "cylinder"
-    case_outline = None
-
-    top_plate_thickness = 5
-
-
-    outline_point_list = list(outline_point_set)
-
-
-    _, perimeter = alpha_shape.alpha_shape(alpha_factor, outline_point_list)
-    # alpha_shape.draw(outline_indices, outline_point_set)
-
-    # outline_verts = []
-    # for ind in outline_indices:
-    #     p0 = outline_point_list[ind[0]]
-    #     p1 = outline_point_list[ind[1]]
-    #     outline_verts.append([list(p0), list(p1)])
-    # outline_indices = sorted(outline_indices.tolist())
-    path = []
-    last_pos = None
-    for edge in perimeter:
-        if last_pos == edge[0]:
-            path.append(list(outline_point_list[edge[0]]))
-            last_pos = edge[1]
+        if self.opt.fast:
+            self.epsilon = 1e-4
         else:
-            path.append(list(outline_point_list[edge[1]]))
-            last_pos = edge[0]
-    outline_poly = polygon(points=path)
-    kb_pcb.add_edge_cuts(path)
+            self.epsilon = 0
 
-    if corner_type == "spherical":
-        corner_raidus = 1.5
-        segs = 35
-        case_outline = translate([corner_raidus, corner_raidus, corner_raidus])(
-            minkowski()(
-                cube([
-                    size_x - corner_raidus*2,
-                    size_y - corner_raidus*2,
-                    top_plate_thickness - corner_raidus*2,
-                ]),
-                sphere(r=corner_raidus, segments=segs)
+    def write_to_file(self, file_name):
+        with open(file_name, "w") as out_file:
+            out_file.write(self.generate_str())
+
+    def edge_list_to_path(self, edge_list, point_list):
+        path = []
+        last_pos = edge_list[0][0]
+        for edge in edge_list:
+            if last_pos == edge[0]:
+                path.append(list(point_list[edge[0]]))
+                last_pos = edge[1]
+            else:
+                path.append(list(point_list[edge[1]]))
+                last_pos = edge[0]
+        return path
+
+    def inset_path(self, path, inset_size):
+        result = []
+
+        for (i, _) in enumerate(path):
+            # ignore the first and last point if they are the same
+            last_point = kle.Point(*path[i-1])
+            this_point = kle.Point(*path[i])
+            next_point = kle.Point(*path[(i+1) % len(path)])
+
+            # vectors pointing to and from the current point
+            v0 = this_point - last_point
+            v1 = next_point - this_point
+
+            # perpendicular unit vectors to v0, v1 (to the interior)
+            u0 = kle.Point(-v0.y, v0.x).normalize()
+            u1 = kle.Point(-v1.y, v1.x).normalize()
+
+            # if u0.cross_product(v0) > 0:
+            #     u0 *= -1
+
+            # if u1.cross_product(v1) > 0:
+            #     u1 *= -1
+
+            # s = a * (1- u0⋅u1) / (v1⋅u0)
+            v1_dot_u0 = v1.dot_product(u0)
+            if v1_dot_u0 != 0:
+                s = inset_size * (1 - u0.dot_product(u1)) / v1_dot_u0
+                new_point = this_point + inset_size*u1 + s*v1
+            else:
+                new_point = this_point + inset_size*u1
+            result.append(tuple(new_point))
+        return result
+
+    def generate_str(self):
+        scad_morphology_path = os.path.join("scad-utils", "morphology.scad")
+        use(scad_morphology_path)
+
+        outline_point_set = set()
+
+        up_x = math.inf
+        up_y = math.inf
+        bot_x = -math.inf
+        bot_y = -math.inf
+
+        spacing = self.opt.spacing
+        hole_size = self.opt.switch_hole_size
+
+        for key in self.kle_layout.get_keys():
+
+            def add_points(point1, point2, n):
+                result = set()
+                dv = point2 - point1
+
+                for (i, t) in enumerate(np.linspace(0, 1.0, n+2)):
+                    result.add(point1 + (float(t)*dv))
+                return result
+
+            points = key.get_rect_points()
+
+            outline_point_set.update(set(points))
+
+            n_w = math.floor(key.u_w()) + self.opt.alpha_density
+            outline_point_set.update(add_points(points[0], points[1], n_w))
+            outline_point_set.update(add_points(points[2], points[3], n_w))
+            n_h = math.floor(key.u_h()) + self.opt.alpha_density
+            outline_point_set.update(add_points(points[0], points[3], n_h))
+            outline_point_set.update(add_points(points[1], points[2], n_h))
+
+
+            for point in key.get_rect_points():
+                up_x = min(point.x, up_x)
+                up_y = min(point.y, up_y)
+
+                bot_x = max(point.x, bot_x)
+                bot_y = max(point.y, bot_y)
+        margin = self.opt.margin
+        margin = self.opt.margin
+        size_x = abs(bot_x - up_x) + margin
+        size_y = abs(bot_y - up_y) + margin
+
+        case_outline = None
+
+        top_thickness = self.opt.top_thickness
+        bot_thickness = self.opt.bot_thickness
+
+        # Use the outline points to determine the bounding polygons for the
+        # case and the PCB
+        outline_point_list = list(outline_point_set)
+
+        _, case_perimeter = alpha_shape.alpha_shape(self.opt.alpha, outline_point_list)
+        _, pcb_perimeter = alpha_shape.alpha_shape(self.opt.pcb_alpha, outline_point_list)
+
+        case_path = self.edge_list_to_path(case_perimeter, outline_point_list)
+        outline_poly = polygon(points=case_path)
+
+        pcb_path = self.edge_list_to_path(pcb_perimeter, outline_point_list)
+        inset_size = 2.5
+
+        pcb_path = self.inset_path(pcb_path, inset_size)
+
+        self.kb_pcb.add_edge_cuts(pcb_path)
+        pcb_poly = polygon(points=pcb_path)
+
+        # With the case outline, start constructing the 3D shape of the case
+        if self.opt.corner_type == "spherical":
+            corner_raidus = 1.5
+            segs = self.opt.segments
+            top_plate = translate([corner_raidus, corner_raidus, corner_raidus])(
+                minkowski()(
+                    cube([
+                        size_x - corner_raidus*2,
+                        size_y - corner_raidus*2,
+                        top_thickness - corner_raidus*2,
+                    ]),
+                    sphere(r=corner_raidus, segments=segs)
+                ),
             )
-        )
-    elif corner_type == "cylinder":
-        corner_raidus = 3
-        segs = 50
-        case_outline = linear_extrude(top_plate_thickness)(
-            fillet(r=corner_raidus, segments=segs)(
+            bot_case = translate([corner_raidus, corner_raidus, corner_raidus-bot_thickness])(
+                minkowski()(
+                    cube([
+                        size_x - corner_raidus*2,
+                        size_y - corner_raidus*2,
+                        bot_thickness - corner_raidus*2,
+                    ]),
+                    sphere(r=corner_raidus, segments=segs)
+                ),
+            )
+        elif self.opt.corner_type == "cylinder":
+            corner_raidus = 3
+            segs = 50
+            case_outline = fillet(r=corner_raidus, segments=segs)(
                 rounding(r=corner_raidus, segments=segs)(
                     outline_poly
                 )
             )
-        )
-        case_outline2 = fillet(r=0.3, segments=segs)(
-            rounding(r=0.3, segments=segs)(
-                outline_poly
+        elif self.opt.corner_type == "rectangular":
+            case_outline = outline_poly
+
+        if self.opt.corner_type in ["cylinder", "rectangular"]:
+            top_plate = linear_extrude(top_thickness)(case_outline)
+            bot_case = translate([0, 0, -bot_thickness])(
+                linear_extrude(bot_thickness)(case_outline)
             )
-        )
-    elif corner_type == "rectangular":
-        pos = kle.Point(up_x, up_y)
-        case_outline = translate(list(-pos))(
-            cube([size_x, size_y, top_plate_thickness])
-        )
-    # return scad_render(case_outline)
 
-    top_plate = None
-    bot_case = None
-
-    if 0:
-        bot_case = translate([0, 0, -thickness])(top_plate)
-    else:
-        top_plate = translate([up_x-margin/2, up_y-margin/2, 0])(case_outline)
-        bot_case = translate([up_x-margin/2, up_y-margin/2, -thickness])(case_outline)
-        # case above and below
-        # bot_case_cavity = translate([2.2, 1.8, 0])(scale([0.97, 0.95, 1.01])(bot_case))
-        bot_case_cavity = translate([up_x-margin/2, up_y-margin/2, -thickness])(
-            linear_extrude(thickness)(
-                inset(d=2.5)(
-                    case_outline2
-                )
+        if self.opt.pcb_tolerance == 0:
+            pcb_cutout = pcb_poly
+        else:
+            pcb_cutout = outset(d=self.opt.pcb_tolerance)(
+                pcb_poly
+            )
+        bot_case_cavity = translate([0, 0, -bot_thickness])(
+            linear_extrude(bot_thickness+self.opt.pcb_tolerance_z)(
+                pcb_cutout
             )
         )
 
 
-    if 0:
-        # # bottom case cavity
-        safety_margin = 0.5
-        safety_margin = 1.5
-        gap_size = spacing - hole_size - safety_margin
-        bot_x = -margin/2 + gap_size/2
-        bot_y = -margin/2 + gap_size/2
-        bot_size_x = size_x - gap_size
-        bot_size_y = size_y - gap_size
-        bot_case_cavity = translate([bot_x, bot_y, -thickness])(
-            cube([bot_size_x, bot_size_y, thickness])
-        )
+#         if 0:
+#             # # bottom case cavity
+#             safety_margin = 0.5
+#             safety_margin = 1.5
+#             gap_size = spacing - hole_size - safety_margin
+#             bot_x = -margin/2 + gap_size/2
+#             bot_y = -margin/2 + gap_size/2
+#             bot_size_x = size_x - gap_size
+#             bot_size_y = size_y - gap_size
+#             bot_case_cavity = translate([bot_x, bot_y, -bot_thickness])(
+#                 cube([bot_size_x, bot_size_y, bot_thickness])
+#             )
 
+        # take cavity out of botcase
+        body = None
+        if self.opt.plate_only:
+            body = top_plate
+        else:
+            if self.opt.corner_type == "spherical":
+                body = hull()(top_plate + bot_case) - bot_case_cavity
+            else:
+                body = (top_plate + bot_case) - bot_case_cavity
 
-    # define lid outline, case bottom lid
-    lid_thickness = 1.5
-    bot_case_lid = translate([bot_x, bot_y, 0])(
-        linear_extrude(lid_thickness)(
-            inset(d=2.5)(
-                case_outline2
+        hole_list = []
+        add_list = []
+
+        # features that need to be added and subtracted from the lid
+        lid_add_list = []
+        lid_del_list = []
+
+        dParser = directives.DirectiveParser()
+        hole_builder = HoleBuilder(top_plate_thickness=top_thickness,
+                                pcb_thickness=self.opt.pcb_thickness)
+
+        for (i, key) in enumerate(self.kle_layout.get_keys()):
+            key_pos = key.get_center()
+            x, y = key_pos
+            w, h = key.w(), key.h()
+            angle = key.r()
+
+            self.kb_pcb.add_switch(
+                x, y, w, h, angle,
+                spacing=spacing
             )
+
+
+            for (leg_pos, legend) in key.get_legend_list():
+                leg_offset = kle.Point(leg_pos[0], leg_pos[1]) * spacing/2
+                try:
+                    directive_list = dParser.parse_str(legend)
+                except Exception as err:
+                    print("Warning: failed to parse directive: " + str(err), file=sys.stderr)
+
+                for directive in directive_list:
+                    dir_offset = kle.Point(*directive.get_offset())
+                    item_pos = key_pos + leg_offset + dir_offset
+
+                    if type(directive) == directives.HexDirective:
+                        if directive.h != None:
+                            thickness = directive.h
+                        else:
+                            thickness = top_thickness
+                        if  directive.top:
+                            hole_list.append(
+                                create_hex_hole(
+                                    item_pos.x,
+                                    item_pos.y,
+                                    directive.size,
+                                    thickness,
+                                    angle=directive.r
+                                )
+                            )
+                    elif type(directive) == directives.ScrewDirective:
+                        if directive.top:
+                            hole_list.append(
+                                create_screw_hole(
+                                    item_pos.x,
+                                    item_pos.y,
+                                    radius = directive.size / 2,
+                                    thickness = top_thickness,
+                                )
+                            )
+                    elif type(directive) == directives.USBCDirective:
+                        if directive.top:
+                            hole_list.append(
+                                hole_builder.create_usb_c_hole(
+                                    item_pos.x,
+                                    item_pos.y,
+                                    flip=directive.flip,
+                                    pos_z=directive.z,
+                                )
+                            )
+                    elif type(directive) == directives.RectDirective:
+                        if directive.h != None:
+                            h = directive.h
+                        else:
+                            h = top_thickness
+                        if  directive.top:
+                            hole_list.append(
+                                create_rect_hole(
+                                    item_pos.x, item_pos.y,
+                                    directive.l, directive.w, h,
+                                    pos_z=directive.z,
+                                    angle=directive.r
+                                )
+                            )
+                    else:
+                        print("Warning> Unknown directive: {}".format(directive), file=sys.stderr)
+
+            # all_holes += create_switch_hole(pos_x, pos_y)
+            hole_list.append(create_switch_hole(x, y, angle, top_thickness, hole_size=hole_size))
+
+        # body += union()(translate([0, -14, 0])(add_list))
+        # body -= union()(translate([0, -14, 0])(hole_list))
+
+        body += add_list
+        body -= hole_list
+
+        parts = part()(
+            part()(color("yellow")(body)),
         )
-    )
 
-    # lid_center_offset = (0, -100)
+        # translate board to be centered on the origin
+        parts = translate([0, 0, 0])(parts)
 
-    # bot_case_lid  = linear_extrude(lid_thickness)(
-    #         translate([2.3,1.8, 0])(scale([0.97 - 0.0015, 0.95 - 0.0015, 1.00])(
-    #             (hull()(outline_hull_list))
-    #         )
-    #     )
-    # )
+        # #
+        parts = mirror([0, 1, 0])(parts)
 
-    # take cavity out of botcase
-    body = None
-    if plate_only:
-        body = top_plate
-    else:
-        body = (top_plate + bot_case) - bot_case_cavity
-
-    hole_list = []
-    add_list = []
-
-    # features that need to be added and subtracted from the lid
-    lid_add_list = []
-    lid_del_list = []
-
-    dParser = directives.DirectiveParser()
-    hole_builder = HoleBuilder(top_plate_thickness=thickness,
-                               pcb_thickness=pcb_thickness)
-
-    for (i, key) in enumerate(keyboard.get_keys()):
-        key_pos = key.get_center()
-        x, y = key_pos
-        w, h = key.w(), key.h()
-        angle = key.r()
-
-        kb_pcb.add_switch(
-            x, y, w, h, angle,
-            spacing=spacing
-        )
-
-
-        for (leg_pos, legend) in key.get_legend_list():
-            leg_offset = kle.Point(leg_pos[0], leg_pos[1]) * spacing/2
-            try:
-                directive_list = dParser.parse_str(legend)
-            except Exception as err:
-                print("Warning: failed to parse directive: " + str(err), file=sys.stderr)
-
-            for directive in directive_list:
-                dir_offset = kle.Point(*directive.get_offset())
-                item_pos = key_pos + leg_offset + dir_offset
-
-                if type(directive) == directives.HexDirective:
-                    if  directive.top:
-                        hole_list.append(
-                            create_hex_hole(
-                                item_pos.x,
-                                item_pos.y,
-                                directive.size,
-                                thickness,
-                                angle=directive.r
-                            )
-                        )
-                elif type(directive) == directives.ScrewDirective:
-                    if directive.top:
-                        hole_list.append(
-                            create_screw_hole(
-                                item_pos.x,
-                                item_pos.y,
-                                radius = directive.size / 2,
-                                thickness = thickness,
-                            )
-                        )
-                elif type(directive) == directives.USBCDirective:
-                    if directive.top:
-                        hole_list.append(
-                            hole_builder.create_usb_c_hole(
-                                item_pos.x,
-                                item_pos.y,
-                                flip=directive.flip,
-                                pos_z=directive.z,
-                            )
-                        )
-                else:
-                    print("Warning> Unknown directive: {}".format(directive), file=sys.stderr)
-
-        # all_holes += create_switch_hole(pos_x, pos_y)
-        hole_list.append(create_switch_hole(x, y, angle, top_plate_thickness, hole_size=hole_size))
-
-    body += union()(translate([0, -14, 0])(add_list))
-    body -= union()(translate([0, -14, 0])(hole_list))
-    # body -= union()(translate([0, 0, 0])(hole_list))
-
-    # a = translate([lid_center_offset[0], lid_center_offset[1], 0])(
-    #     bot_case_lid
-    # )
-
-    # # b = mirror([0, 0, 0])(a)
-    # b = mirror([0, 1, 0])(
-    #     translate([lid_center_offset[0], lid_center_offset[1], 0])(
-    #         mirror([0, 1, 0])(
-    #             bot_case_lid
-    #         )
-    #     )
-    # )
-
-    # bot_case_lid = union()(a, b)
-
-    # bot_case_lid = resize([162, 97])(translate([-1, 2.5, 0])(bot_case_lid))
-    # bot_case_lid = scale([1, 1, 1])(translate([0, 0, 0])(bot_case_lid))
-
-    temp = union()(bot_case_lid)
-
-    bot_case_lid += union()(lid_add_list)
-    bot_case_lid -= union()(lid_del_list)
-    bot_case_lid = intersection()(bot_case_lid, scale([1, 1, 5])(temp))
-    bot_case_lid = translate([0, 0, -thickness*3-0])(bot_case_lid) # move into position
-    bot_case_lid = intersection()(bot_case_lid, scale([1, 1, 5])(bot_case_cavity))
-    # bot_case_lid = translate([100, size_y + 2, 0])(bot_case_lid) # move to the side
-
-    parts = part()(
-        part()(color("yellow")(body)),
-        # part()(color("red")(bot_case_lid)),
-    )
-
-    # translate board to be centered on the origin
-    parts = translate([-size_x/2, -size_y/2, 0])(parts)
-
-    # #
-    parts = mirror([0, 1, 0])(parts)
-
-    kb_pcb.write_to_file("test_pcb/test_pcb.kicad_pcb")
-    # return scad_render(parts)
-    return scad_render(parts)
+        self.kb_pcb.write_to_file("test_pcb/test_pcb.kicad_pcb")
+        # return scad_render(parts)
+        return scad_render(parts)
 
 
 if __name__ == "__main__":
@@ -642,12 +675,29 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='KLE -> 3D printed plate generator')
     parser.add_argument('kle_json_file', type=str, action='store',
                         help='The hexfile to flash'),
-    parser.add_argument('--thickness', type=float, action='store',
+    parser.add_argument('--top-thickness', type=float, action='store',
                         default=5.0,
                         help='The thickness of the plate'),
+    parser.add_argument('--bot-thickness', type=float, action='store',
+                        default=5.0,
+                        help='The thickness of bottom of the case'),
+    parser.add_argument('--lid-thickness', type=float, action='store',
+                        default=1.5,
+                        help='The thickness of lid'),
+    parser.add_argument('--margin', type=float, action='store',
+                        default=0,
+                        help='Extra space added around case'),
     parser.add_argument('--pcb-thickness', type=float, action='store',
                         default=1.6,
                         help='The thickness of the pcb'),
+    parser.add_argument('--pcb-tolerance', type=float, action='store',
+                        default=0.25,
+                        help='When cutting out a region for the PCB, this much'
+                        ' space is added on both sides to allow the PCB to fit.'),
+    parser.add_argument('--pcb-tolerance-z', type=float, action='store',
+                        default=0.2,
+                        help='Tolerance gap between the top of the PCB and the '
+                        'switch plate.'),
     parser.add_argument('--switch-hole-size', type=float, action='store',
                         default=14.0,
                         help='The size of the switch holes'),
@@ -655,13 +705,28 @@ if __name__ == "__main__":
                         default=19.0,
                         help='The spacing between the switches (center-to-center)'),
     parser.add_argument('--alpha', type=float, action='store',
-                        default=0.07,
+                        default=0.03,
                         help='Value used when generating the case outline. '
+                        'Use smaller values for a more "convex shape."'),
+    parser.add_argument('--pcb-alpha', type=float, action='store',
+                        default=0.03,
+                        help='Value used when generating the pcb outline. '
                         'Use smaller values for a more "convex shape."'),
     parser.add_argument('--alpha-density', type=int, action='store',
                         default=1,
                         help="Increases the point density for the case outline "
                         "algorithm."),
+    parser.add_argument('--plate-only', type=bool, action='store',
+                        default=False,
+                        help="Only generate the plate"),
+    parser.add_argument('--corner-type', type=str, action='store',
+                        default='cylinder',
+                        help="The type of corners to be used when constructing the case."),
+    parser.add_argument('--segments', type=int, action='store',
+                        default=20,
+                        help="The type of corners to be used when constructing the case."),
+    parser.add_argument('--fast', action='store_true',
+                        help="The type of corners to be used when constructing the case."),
 
     args = parser.parse_args()
 
@@ -669,14 +734,10 @@ if __name__ == "__main__":
     with open(args.kle_json_file) as json_file:
         json_layout = json.loads(json_file.read())
 
-    scad_code = test_kle(json_layout,
-                         args.thickness,
-                         spacing=args.spacing,
-                         hole_size=args.switch_hole_size,
-                         margin=0,
-                         alpha_factor=args.alpha,
-                         alpha_point_density=args.alpha_density,
-                         pcb_thickness=args.pcb_thickness,
-                         )
+    kb_builder = KeyboardBuilder(json_layout, args)
+    scad_code = kb_builder.generate_str()
 
+
+    with open("test_pcb/test_plate.scad", "w") as out_file:
+        out_file.write(scad_code)
     print(scad_code)

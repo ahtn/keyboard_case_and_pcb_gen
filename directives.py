@@ -47,12 +47,14 @@ class HexDirective(Directive):
     KEYWORD = 'hex'
     NUM_POS_ARGS = 1
 
-    def __init__(self, size, x=0, y=0, r=0, top=True, pcb=True, bot=True):
+    def __init__(self, size, x=0, y=0, z=0, h=None, r=0, top=True, pcb=True, bot=True):
         assert(size > 0)
         self.size = size
         self.x = x
         self.y = y
+        self.z = z
         self.r = r
+        self.h = h
         self.top = top
         self.bot = bot
         self.pcb = pcb
@@ -63,7 +65,38 @@ class HexDirective(Directive):
         return HexDirective(args.positional[0], **args.keyword)
 
     def __str__(self):
-        return "HexDirective(size={}, x={}, y={}, r={})".format(self.size, self.x, self.y, self.r)
+        return "HexDirective(size={}, x={}, y={}, z={}, r={})".format(self.size, self.x, self.y, self.z, self.r)
+    __repr__ = __str__
+
+class RectDirective(Directive):
+    KEYWORD = 'rect'
+    NUM_POS_ARGS = 2
+
+    def __init__(self, l, w, h=None, x=0, y=0, z=0, r=0, top=True, pcb=True, bot=True):
+        assert(w > 0 and l > 0 and (h==None or h>0))
+        self.w = w
+        self.l = l
+        self.h = h
+        self.x = x
+        self.y = y
+        self.z = z
+        self.r = r
+        self.h = h
+        self.top = top
+        self.bot = bot
+        self.pcb = pcb
+
+    @staticmethod
+    def from_args(args):
+        Directive.check_args(RectDirective, args)
+        return RectDirective(args.positional[0], args.positional[1], **args.keyword)
+
+    def __str__(self):
+        return "RectDirective(w={}, l={}, h={}, x={}, y={}, z={}, r={})".format(
+            self.w, self.l, self.h,
+            self.x, self.y, self.z,
+            self.r
+        )
     __repr__ = __str__
 
 class ScrewDirective(Directive):
@@ -170,6 +203,7 @@ directiveLookupTable = {
     'hex': HexDirective,
     'screw': ScrewDirective,
     'usb_c': USBCDirective,
+    'rect': RectDirective,
 }
 
 class DirectiveArgs(object):
