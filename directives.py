@@ -47,7 +47,7 @@ class HexDirective(Directive):
     KEYWORD = 'hex'
     NUM_POS_ARGS = 1
 
-    def __init__(self, size, x=0, y=0, z=0, h=None, r=0, top=True, pcb=True, bot=True):
+    def __init__(self, size, x=0, y=0, z=0, h=None, r=0, top=True, pcb=False, lid=False):
         assert(size > 0)
         self.size = size
         self.x = x
@@ -56,7 +56,7 @@ class HexDirective(Directive):
         self.r = r
         self.h = h
         self.top = top
-        self.bot = bot
+        self.lid = lid
         self.pcb = pcb
 
     @staticmethod
@@ -72,7 +72,7 @@ class RectDirective(Directive):
     KEYWORD = 'rect'
     NUM_POS_ARGS = 2
 
-    def __init__(self, l, w, h=None, x=0, y=0, z=0, r=0, top=True, pcb=True, bot=True):
+    def __init__(self, l, w, h=None, x=0, y=0, z=0, r=0, top=True, pcb=False, lid=False):
         assert(w > 0 and l > 0 and (h==None or h>0))
         self.w = w
         self.l = l
@@ -83,7 +83,7 @@ class RectDirective(Directive):
         self.r = r
         self.h = h
         self.top = top
-        self.bot = bot
+        self.lid = lid
         self.pcb = pcb
 
     @staticmethod
@@ -151,18 +151,24 @@ class ScrewDirective(Directive):
         "M6"   : 6.6,
     }
 
-    def __init__(self, size, x=0, y=0, top=True, pcb=True, bot=True):
+    def __init__(self, size, d2=None, x=0, y=0, h=None, top=True, pcb=True, lid=True):
         if type(size) == str:
             if not size in self.SCREW_LOOKUP:
                 raise DirectiveParserError("Unknown screw size '{}'".format(size))
             self.size = self.SCREW_LOOKUP[size]
+            if d2:
+                self.d2 = d2
+            else:
+                self.d2 = self.size * 2
         else:
             assert(size > 0)
             self.size = size
+            self.d2 = d2
         self.x = x
         self.y = y
+        self.h = h
         self.top = top
-        self.bot = bot
+        self.lid = lid
         self.pcb = pcb
 
     @staticmethod
@@ -178,13 +184,13 @@ class USBCDirective(Directive):
     KEYWORD = 'usb_c'
     NUM_POS_ARGS = 0
 
-    def __init__(self, x=0, y=0, z=0, r=0, top=True, pcb=True, bot=True, flip=False):
+    def __init__(self, x=0, y=0, z=0, r=0, top=True, pcb=True, lid=True, flip=False):
         self.x = x
         self.y = y
         self.z = z
         self.r = r
         self.top = top
-        self.bot = bot
+        self.lid = lid
         self.pcb = pcb
         self.flip = flip
 

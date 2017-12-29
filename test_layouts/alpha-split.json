@@ -3,25 +3,25 @@
     {
       "a": 7
     },
-    "\n\n\n\n\n\n\n\n\n\nrect(5, 5, h=1.4, x=4.5)",
-    "\n\nusb_c(y=0, flip=false, z=+0.8)",
-    "\n\n\nhex(4.0, r=30, h=3.5)",
-    "\n\nusb_c(y=0, flip=false, z=+0.8)",
+    "\n\n\nrect(5, 5, h=1.4, x=6)",
+    "\n\nusb_c(y=0, z=+0.8)",
+    "\n\n\nhex(4.7, r=30, h=3.5, lid=false);screw('m3', top=false,pcb=false)",
+    "\n\nusb_c(y=0, z=+0.8)",
     "",
     ""
   ],
   [
-    "\n\n\nhex(4.0, r=30, h=3.5)",
+    "\n\n\nhex(4.7, r=30, h=3.5, lid=false);screw('m3', top=false,pcb=false)",
     "\n\n\nrect(7, 5, h=1.4)",
-    "",
-    "\n\n\nrect(7, 5, h=1.4)",
-    "\n\n\nhex(4.0, r=30, h=3.5)",
+    "\n\n\n\n\n\nscrew(1.5, y=1.0, top=false,pcb=false)",
+    "\n\n\nrect(7, 5, h=1.4);rect(4.5, 2.5, h=5,lid=true,top=false);rect(6.0, 3.5, h=0.5,lid=true,top=false)",
+    "\n\n\nhex(4.7, r=30, h=3.5, lid=false);screw('m3', top=false,pcb=false)",
     ""
   ],
   [
     "",
-    "\n\n\n\n\n\n\n\n\n\nrect(3, 5, h=2.7, x=-0.7)",
-    "\n\n\nhex(4.0, r=30, h=3.5)\n\n\n\n\n\n\nrect(3, 5, h=2.7, x=+0.7)",
+    "\n\n\n\n\n\n\n\n\n\nrect(3, 5, h=2.3, x=-1.4)",
+    "\n\n\nhex(4.7, r=30, h=3.5, lid=false);screw('m3', top=false,pcb=false)\n\n\n\n\n\n\nrect(3, 5, h=2.3, x=+1.4)",
     "",
     "",
     ""

@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 from solid import *
+from solid.utils import *
+
 import os
 import sys
 import math
@@ -66,14 +68,14 @@ def switch_hole_local(thickness, spacing=19.0, hole_size=14.0, hole_extra=0.0):
 
 def create_switch_hole(pos_x, pos_y, angle, thickness, spacing=19.0, hole_size=14.0,
                 hole_extra=0.0):
-    hole = (
-        switch_hole_local(thickness + 0,
-                          spacing=spacing,
-                          hole_size=hole_size,
-                          hole_extra=hole_extra)
+    switch_hole = switch_hole_local(
+        thickness + 0,
+        spacing=spacing,
+        hole_size=hole_size,
+        hole_extra=hole_extra
     )
     return translate([pos_x, pos_y, -0])(rotate([0, 0, angle])(
-        translate([-hole_size/2, -hole_size/2, 0])(hole)))
+        translate([-hole_size/2, -hole_size/2, 0])(switch_hole)))
 
 def create_hex_hole(pos_x, pos_y, size, thickness, pos_z=0.0, angle=0.0):
 
@@ -95,28 +97,28 @@ def create_rect_hole(pos_x, pos_y, l, w, h, pos_z=0.0, angle=0.0):
         )
     )
 
-def create_screw_hole(pos_x, pos_y, radius, thickness):
+def create_screw_hole(pos_x, pos_y, radius, thickness, pos_z=0):
 
     screw_hole = render()(
         cylinder(r=radius, h=thickness, segments=20)
     )
 
-    return translate([pos_x, pos_y, 0])(
+    return translate([pos_x, pos_y, pos_z])(
         screw_hole
     )
 
 class HoleBuilder(object):
-    def __init__(self, top_plate_thickness=5.0, pcb_thickness=1.6):
+    def __init__(self, top_plate_thickness=5.0, pcb_thickness=1.6, segments=15):
         self.top_plate_thickness = top_plate_thickness
         self.pcb_thickness = pcb_thickness
+        self.segments = segments
 
     def create_usb_c_hole(self, pos_x, pos_y, pos_z=0, flip=False):
-        l = 9.3
-        w = 3.4
+        l = 9.5
+        w = 3.6
         h = 10
         corner_raidus = 0.8
-        segs = 10
-
+        segs = min(self.segments, 20)
 
         port_hole = render()(
             rotate([-90, 0, 0])(
@@ -266,23 +268,6 @@ def create_cr2032_lid_hole(pos_x, pos_y, lid_thickness, scale=1.0):
 
     return translate([pos_x, pos_y, z])(hole)
 
-def create_mid_key_usb_c_hole(pos_x, pos_y, top_plate_thickness):
-    w = 10
-    h = 5
-    tall = 4
-
-    nrf24_hole = cube([w, h, tall])
-
-    x = pos_x - w/2
-    y = pos_y - h/2
-    z = -tall
-
-    nrf24_hole = translate([x, y, z])(nrf24_hole) # move hole into position
-
-    return nrf24_hole
-
-
-
 class PCBBuilder(object):
 
     def __init__(self, pcb_thickness=1.6):
@@ -348,6 +333,23 @@ class PCBBuilder(object):
     def generate_str(self):
         return self.pcb.generate()
 
+class OpenSCADObjectBuilder(object):
+    def __init__(self, obj=None):
+        self.add_list = []
+        self.del_list = []
+        if obj:
+            self.add_list.append(obj)
+
+    def __add__(self, other):
+        self.add_list.append(other)
+        return self
+
+    def __sub__(self, other):
+        self.del_list.append(other)
+        return self
+
+    def generate(self):
+        return union()(self.add_list) - self.del_list
 
 class KeyboardBuilder(object):
 
@@ -356,6 +358,9 @@ class KeyboardBuilder(object):
 
         self.kle_layout = kle.Keyboard.from_json(json_layout, spacing=self.opt.spacing)
         self.kb_pcb = PCBBuilder(self.opt.pcb_thickness)
+
+        self.case = OpenSCADObjectBuilder()
+        self.lid = OpenSCADObjectBuilder()
 
         if self.opt.fast:
             self.epsilon = 1e-4
@@ -507,7 +512,7 @@ class KeyboardBuilder(object):
             )
         elif self.opt.corner_type == "cylinder":
             corner_raidus = 3
-            segs = 50
+            segs = self.opt.segments
             case_outline = fillet(r=corner_raidus, segments=segs)(
                 rounding(r=corner_raidus, segments=segs)(
                     outline_poly
@@ -521,17 +526,25 @@ class KeyboardBuilder(object):
             bot_case = translate([0, 0, -bot_thickness])(
                 linear_extrude(bot_thickness)(case_outline)
             )
-
+            lid_cutout_inset = 2.5-self.opt.pcb_tolerance
+            lid_cutout_outline = inset(d=lid_cutout_inset,segments=self.opt.segments)(case_outline)
+            lid_inset = lid_cutout_inset+self.opt.lid_tolerance
+            lid_outline = inset(d=lid_inset,segments=self.opt.segments)(case_outline)
+            self.lid += linear_extrude(self.opt.lid_thickness)(lid_outline)
+            lid_cutout = linear_extrude(self.opt.lid_thickness)(lid_cutout_outline)
         if self.opt.pcb_tolerance == 0:
             pcb_cutout = pcb_poly
         else:
-            pcb_cutout = outset(d=self.opt.pcb_tolerance)(
+            pcb_cutout = outset(d=self.opt.pcb_tolerance, segments=self.opt.segments)(
                 pcb_poly
             )
+
         bot_case_cavity = translate([0, 0, -bot_thickness])(
             linear_extrude(bot_thickness+self.opt.pcb_tolerance_z)(
                 pcb_cutout
             )
+        ) + translate([0, 0, -bot_thickness])(
+            lid_cutout
         )
 
 
@@ -558,16 +571,14 @@ class KeyboardBuilder(object):
             else:
                 body = (top_plate + bot_case) - bot_case_cavity
 
-        hole_list = []
-        add_list = []
-
-        # features that need to be added and subtracted from the lid
-        lid_add_list = []
-        lid_del_list = []
+        self.case += body
 
         dParser = directives.DirectiveParser()
-        hole_builder = HoleBuilder(top_plate_thickness=top_thickness,
-                                pcb_thickness=self.opt.pcb_thickness)
+        hole_builder = HoleBuilder(
+            top_plate_thickness = top_thickness,
+            pcb_thickness = self.opt.pcb_thickness,
+            segments = self.opt.segments
+        )
 
         for (i, key) in enumerate(self.kle_layout.get_keys()):
             key_pos = key.get_center()
@@ -593,68 +604,98 @@ class KeyboardBuilder(object):
                     item_pos = key_pos + leg_offset + dir_offset
 
                     if type(directive) == directives.HexDirective:
+                        # Create a hex hole
                         if directive.h != None:
                             thickness = directive.h
                         else:
                             thickness = top_thickness
                         if  directive.top:
-                            hole_list.append(
-                                create_hex_hole(
-                                    item_pos.x,
-                                    item_pos.y,
-                                    directive.size,
-                                    thickness,
-                                    angle=directive.r
-                                )
+                            self.case -= create_hex_hole(
+                                item_pos.x,
+                                item_pos.y,
+                                directive.size,
+                                thickness,
+                                angle=directive.r
                             )
                     elif type(directive) == directives.ScrewDirective:
+                        # Create a screw hole
                         if directive.top:
-                            hole_list.append(
-                                create_screw_hole(
-                                    item_pos.x,
-                                    item_pos.y,
-                                    radius = directive.size / 2,
-                                    thickness = top_thickness,
+                            self.case -= create_screw_hole(
+                                item_pos.x,
+                                item_pos.y,
+                                radius = directive.size / 2,
+                                thickness = top_thickness,
+                            )
+                        if directive.lid:
+                            # screw_head_size = directive.h
+                            screw_head_size = 1.8
+                            screw_retain_thickness = 1.5
+                            screw_retain_margin = 0.8
+                            # main shaft for screw hole in lid
+                            self.lid -= create_screw_hole(
+                                item_pos.x,
+                                item_pos.y,
+                                radius = directive.size / 2,
+                                thickness = max(
+                                    screw_head_size+screw_retain_thickness,
+                                    self.opt.lid_thickness
                                 )
                             )
-                    elif type(directive) == directives.USBCDirective:
-                        if directive.top:
-                            hole_list.append(
-                                hole_builder.create_usb_c_hole(
+                            if directive.d2 != None:
+                                # make inset hole for screw head in lid
+                                self.lid -= create_screw_hole(
                                     item_pos.x,
                                     item_pos.y,
-                                    flip=directive.flip,
-                                    pos_z=directive.z,
+                                    radius = directive.d2 / 2,
+                                    thickness = screw_head_size,
                                 )
+                                # add extra material on the lid to retain the inset
+                                # screw hole
+                                self.lid += create_screw_hole(
+                                    item_pos.x,
+                                    item_pos.y,
+                                    radius = directive.d2 / 2 + screw_retain_margin,
+                                    thickness = screw_head_size + self.opt.lid_thickness,
+                                )
+                    elif type(directive) == directives.USBCDirective:
+                        # Creat a hole for a USB Type-C connector
+                        if directive.top:
+                            self.case -= hole_builder.create_usb_c_hole(
+                                item_pos.x,
+                                item_pos.y,
+                                flip=directive.flip,
+                                pos_z=directive.z,
                             )
                     elif type(directive) == directives.RectDirective:
+                        # Create a rectangular hole
                         if directive.h != None:
                             h = directive.h
                         else:
                             h = top_thickness
-                        if  directive.top:
-                            hole_list.append(
-                                create_rect_hole(
-                                    item_pos.x, item_pos.y,
-                                    directive.l, directive.w, h,
-                                    pos_z=directive.z,
-                                    angle=directive.r
-                                )
-                            )
+                        rect = create_rect_hole(
+                            item_pos.x, item_pos.y,
+                            directive.l, directive.w, h,
+                            pos_z=directive.z,
+                            angle=directive.r
+                        )
+                        if directive.top:
+                            self.case -= rect
+                        if directive.lid:
+                            self.lid -= rect
+                        # if directive.pcb:
                     else:
                         print("Warning> Unknown directive: {}".format(directive), file=sys.stderr)
+            # Create the hole for the key switch
+            self.case -= create_switch_hole(x, y, angle, top_thickness, hole_size=hole_size)
 
-            # all_holes += create_switch_hole(pos_x, pos_y)
-            hole_list.append(create_switch_hole(x, y, angle, top_thickness, hole_size=hole_size))
-
-        # body += union()(translate([0, -14, 0])(add_list))
-        # body -= union()(translate([0, -14, 0])(hole_list))
-
-        body += add_list
-        body -= hole_list
+        case = self.case.generate()
+        lid = self.lid.generate()
 
         parts = part()(
-            part()(color("yellow")(body)),
+            part()(color("yellow")(case)),
+            down(self.opt.bot_thickness + self.opt.lid_thickness + 3)(
+                part()(color("red")(lid))
+            ),
         )
 
         # translate board to be centered on the origin
@@ -664,7 +705,8 @@ class KeyboardBuilder(object):
         parts = mirror([0, 1, 0])(parts)
 
         self.kb_pcb.write_to_file("test_pcb/test_pcb.kicad_pcb")
-        # return scad_render(parts)
+        scad_render_to_file(case, "test_pcb/test_case.scad")
+        scad_render_to_file(lid, "test_pcb/test_lid.scad")
         return scad_render(parts)
 
 
@@ -684,6 +726,10 @@ if __name__ == "__main__":
     parser.add_argument('--lid-thickness', type=float, action='store',
                         default=1.5,
                         help='The thickness of lid'),
+    parser.add_argument('--lid-tolerance', type=float, action='store',
+                        default=0.4,
+                        help='Tolerance gap for fitting the lid into the '
+                        'bottom of the case.'),
     parser.add_argument('--margin', type=float, action='store',
                         default=0,
                         help='Extra space added around case'),
