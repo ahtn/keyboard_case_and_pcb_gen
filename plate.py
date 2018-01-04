@@ -637,7 +637,7 @@ class KeyboardBuilder(object):
                         if directive.lid:
                             # screw_head_size = directive.h
                             # screw_head_size = 1.8
-                            screw_retain_thickness = 1.8
+                            screw_retain_thickness = 2.3
                             screw_retain_margin = 1.5
                             screw_head_size = directive.head
                             screw_shaft_length = max(

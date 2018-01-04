@@ -6,13 +6,13 @@
   "alpha-density": 1,
   "pcb-tolerance" : 0.5,
   "pcb-tolerance-z" : 0.1,
-  "bot-thickness" : 7.0,
+  "bot-thickness" : 7.3,
   "top-thickness" : 5,
   "corner-type" : "cylinder",
   "segments" : 20,
   "fast" : 1,
   "lid-tolerance" : 0.15,
-  "lid-thickness" : 0.0
+  "lid-thickness" : 1.5
 },
 
 "layout":
