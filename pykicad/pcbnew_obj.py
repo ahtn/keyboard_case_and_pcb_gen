@@ -53,13 +53,14 @@ def generate_paren_statement(key, value):
     return "({} {})".format(key, generate_paren_value(value))
 
 
-class PCBObjectTypeError(object):
+class PCBObjectTypeError(Exception):
     def __init__(self, field, got_type, want_type):
         self.field = field
         self.got_type = got_type
         self.want_type = want_type
 
     def __str__(self):
+        print(type(self.got_type), type(self.want_type), file=sys.stderr)
         return "Expected type for field '{}' is '{}' but got a '{}'".format(
             self.field, self.want_type, self.got_type
         )
@@ -141,7 +142,7 @@ class PCBGeneral(PCBObject):
                             type_mismatch = True
                             break;
                 else:
-                    type_mismatch = got_type == want_type
+                    type_mismatch = (got_type != want_type)
 
                 if type_mismatch:
                     raise PCBObjectTypeError(field, got_type, want_type)

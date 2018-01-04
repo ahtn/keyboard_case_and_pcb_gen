@@ -31,6 +31,17 @@ class DirectiveTypeError(Exception):
 
 
 class Directive(object):
+    DIRECTIVE_LOC_MAP = {
+        'tl' : (-1, -1),
+        'tc' : ( 0, -1),
+        'tr' : (+1, -1),
+        'cl' : (-1,  0),
+        'cc' : ( 0,  0),
+        'cr' : (+1,  0),
+        'bl' : (-1, +1),
+        'bc' : ( 0, +1),
+        'br' : (+1, +1),
+    }
     @staticmethod
     def check_args(obj_class, args):
         if len(args.positional) != obj_class.NUM_POS_ARGS:
@@ -43,11 +54,22 @@ class Directive(object):
     def get_offset(self):
         return (self.x, self.y)
 
+    def get_loc(self):
+        if self.loc not in self.DIRECTIVE_LOC_MAP:
+            raise DirectiveParserError( "Unknown loc value '{}', expected one "
+                " of: {}".format(
+                    self.loc,
+                    ", ".join(self.DIRECTIVE_LOC_MAP.keys())
+                )
+            )
+        return self.DIRECTIVE_LOC_MAP[self.loc]
+
+
 class HexDirective(Directive):
     KEYWORD = 'hex'
     NUM_POS_ARGS = 1
 
-    def __init__(self, size, x=0, y=0, z=0, h=None, r=0, top=True, pcb=False, lid=False):
+    def __init__(self, size, x=0, y=0, z=0, h=None, r=0, loc='cc', top=True, pcb=False, lid=False):
         assert(size > 0)
         self.size = size
         self.x = x
@@ -55,6 +77,7 @@ class HexDirective(Directive):
         self.z = z
         self.r = r
         self.h = h
+        self.loc = loc
         self.top = top
         self.lid = lid
         self.pcb = pcb
@@ -72,7 +95,8 @@ class RectDirective(Directive):
     KEYWORD = 'rect'
     NUM_POS_ARGS = 2
 
-    def __init__(self, l, w, h=None, x=0, y=0, z=0, r=0, top=True, pcb=False, lid=False):
+    def __init__(self, l, w, h=None, x=0, y=0, z=0, r=0,
+                 top=True, pcb=False, lid=False, add=False, loc='cc'):
         assert(w > 0 and l > 0 and (h==None or h>0))
         self.w = w
         self.l = l
@@ -82,9 +106,11 @@ class RectDirective(Directive):
         self.z = z
         self.r = r
         self.h = h
+        self.add = add
         self.top = top
         self.lid = lid
         self.pcb = pcb
+        self.loc = loc
 
     @staticmethod
     def from_args(args):
@@ -150,16 +176,19 @@ class ScrewDirective(Directive):
         "M5"   : 5.5,
         "M6"   : 6.6,
     }
+    DEFAULT_HEAD_THICKNESS = 2.5
 
-    def __init__(self, size, d2=None, x=0, y=0, h=None, top=True, pcb=True, lid=True):
+    def __init__(self, size, d2=None, head=None, x=0, y=0, h=None, top=True,
+                 pcb=True, lid=True, loc='cc'):
         if type(size) == str:
             if not size in self.SCREW_LOOKUP:
                 raise DirectiveParserError("Unknown screw size '{}'".format(size))
-            self.size = self.SCREW_LOOKUP[size]
+            size_str = size
+            self.size = self.SCREW_LOOKUP[size_str]
             if d2:
                 self.d2 = d2
             else:
-                self.d2 = self.size * 2
+                self.d2 = self.SCREW_LOOKUP[size_str.upper()] * 2
         else:
             assert(size > 0)
             self.size = size
@@ -170,6 +199,11 @@ class ScrewDirective(Directive):
         self.top = top
         self.lid = lid
         self.pcb = pcb
+        self.loc = loc
+        if head:
+            self.head = head
+        else:
+            self.head = self.DEFAULT_HEAD_THICKNESS
 
     @staticmethod
     def from_args(args):
@@ -184,7 +218,8 @@ class USBCDirective(Directive):
     KEYWORD = 'usb_c'
     NUM_POS_ARGS = 0
 
-    def __init__(self, x=0, y=0, z=0, r=0, top=True, pcb=True, lid=True, flip=False):
+    def __init__(self, x=0, y=0, z=0, r=0, top=True, pcb=True, lid=True,
+                 flip=False, loc='cc'):
         self.x = x
         self.y = y
         self.z = z
@@ -193,6 +228,7 @@ class USBCDirective(Directive):
         self.lid = lid
         self.pcb = pcb
         self.flip = flip
+        self.loc = loc
 
     @staticmethod
     def from_args(args):
@@ -261,8 +297,22 @@ class DirectiveParser(object):
 
         self.identifierTok = pp.Word(pp.alphas + '_', pp.alphanums + '_')('identifier')
 
+        # self.posKeywordTok = \
+        #     pp.Keyword("tl") | \
+        #     pp.Keyword("tc") | \
+        #     pp.Keyword("tr") | \
+        #     pp.Keyword("cl") | \
+        #     pp.Keyword("cc") | \
+        #     pp.Keyword("cr") | \
+        #     pp.Keyword("bl") | \
+        #     pp.Keyword("bc") | \
+        #     pp.Keyword("br")
+        self.posKeywordTok = \
+            pp.Word(pp.alphas + '_', pp.alphanums + '_')
+        self.posKeywordTok.addParseAction(lambda toks: str(toks[0]))
+
         self.positionalArgTok = self.floatTok | self.stringTok | self.boolTok
-        self.keywordArgTok = pp.Group(self.identifierTok + equalTok + self.positionalArgTok)
+        self.keywordArgTok = pp.Group(self.identifierTok + equalTok + (self.positionalArgTok | self.posKeywordTok))
         self.keywordArgTok.addParseAction(lambda toks: [x for x in toks])
 
         self.argsTok = pp.Optional(

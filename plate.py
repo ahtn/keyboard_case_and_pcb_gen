@@ -18,6 +18,8 @@ from pykicad import pcbnew
 import kle
 import directives
 
+import pyparsing
+
 def switch_hole_local(thickness, spacing=19.0, hole_size=14.0, hole_extra=0.0):
     # switch hole
     switch_w = hole_size
@@ -271,16 +273,16 @@ def create_cr2032_lid_hole(pos_x, pos_y, lid_thickness, scale=1.0):
 class PCBBuilder(object):
 
     def __init__(self, pcb_thickness=1.6):
-        switch      = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_NoSilk_Back.kicad_mod")
-        switch_1    = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u1_NoSilk_Back.kicad_mod")
-        switch_1_25 = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u1.25_NoSilk_Back.kicad_mod")
-        switch_1_5  = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u1.5_NoSilk_Back.kicad_mod")
-        switch_1_75 = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u1.75_NoSilk_Back.kicad_mod")
-        switch_2    = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u2_NoSilk_Back.kicad_mod")
-        switch_2_25 = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u2.25_NoSilk_Back.kicad_mod")
-        switch_2_5  = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u2.5_NoSilk_Back.kicad_mod")
-        switch_2_75 = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u2.75_NoSilk_Back.kicad_mod")
-        switch_3    = pcbnew.Module.from_file("mx.pretty/Cherry_MX_Matias_u3_NoSilk_Back.kicad_mod")
+        switch      = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_NoSilk_Back.kicad_mod"))
+        switch_1    = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1_NoSilk_Back.kicad_mod"))
+        switch_1_25 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1.25_NoSilk_Back.kicad_mod"))
+        switch_1_5  = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1.5_NoSilk_Back.kicad_mod"))
+        switch_1_75 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1.75_NoSilk_Back.kicad_mod"))
+        switch_2    = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2_NoSilk_Back.kicad_mod"))
+        switch_2_25 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2.25_NoSilk_Back.kicad_mod"))
+        switch_2_5  = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2.5_NoSilk_Back.kicad_mod"))
+        switch_2_75 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2.75_NoSilk_Back.kicad_mod"))
+        switch_3    = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u3_NoSilk_Back.kicad_mod"))
 
         self.key_footprints = {
             0:    switch,
@@ -298,7 +300,6 @@ class PCBBuilder(object):
         self.sw_ref_counter = 0
 
         self.pcb = pcbnew.PCBDocument()
-
         self.pcb.general.set_thickness(pcb_thickness)
 
     def add_switch(self, x, y, w, h, r, ref="SW{}", spacing=19.0):
@@ -356,11 +357,7 @@ class KeyboardBuilder(object):
     def __init__(self, json_object, options):
         self.opt = options
 
-        self.kle_layout = kle.Keyboard.from_json(json_layout, spacing=self.opt.spacing)
-        self.kb_pcb = PCBBuilder(self.opt.pcb_thickness)
-
-        self.case = OpenSCADObjectBuilder()
-        self.lid = OpenSCADObjectBuilder()
+        self.kle_layout = kle.Keyboard.from_json(json_object, spacing=self.opt.spacing)
 
         if self.opt.fast:
             self.epsilon = 1e-4
@@ -416,9 +413,13 @@ class KeyboardBuilder(object):
             result.append(tuple(new_point))
         return result
 
-    def generate_str(self):
+    def generate(self, _time=0):
         scad_morphology_path = os.path.join("scad-utils", "morphology.scad")
         use(scad_morphology_path)
+
+        self.case = OpenSCADObjectBuilder()
+        self.lid = OpenSCADObjectBuilder()
+        self.kb_pcb = PCBBuilder(self.opt.pcb_thickness)
 
         outline_point_set = set()
 
@@ -593,15 +594,22 @@ class KeyboardBuilder(object):
 
 
             for (leg_pos, legend) in key.get_legend_list():
-                leg_offset = kle.Point(leg_pos[0], leg_pos[1]) * spacing/2
                 try:
                     directive_list = dParser.parse_str(legend)
+                except pyparsing.ParseException as err:
+                    print("Warning: failed to parse directive: " + str(err), file=sys.stderr)
+                    print(legend, file=sys.stderr)
+                    print(" "*(err.col-1) + "^", file=sys.stderr)
                 except Exception as err:
                     print("Warning: failed to parse directive: " + str(err), file=sys.stderr)
+                    print(legend, file=sys.stderr)
 
                 for directive in directive_list:
+                    loc = directive.get_loc()
+                    dir_loc = kle.Point(loc[0], loc[1]) * spacing/2
+
                     dir_offset = kle.Point(*directive.get_offset())
-                    item_pos = key_pos + leg_offset + dir_offset
+                    item_pos = key_pos + dir_loc + dir_offset
 
                     if type(directive) == directives.HexDirective:
                         # Create a hex hole
@@ -628,18 +636,20 @@ class KeyboardBuilder(object):
                             )
                         if directive.lid:
                             # screw_head_size = directive.h
-                            screw_head_size = 1.8
-                            screw_retain_thickness = 1.5
-                            screw_retain_margin = 0.8
+                            # screw_head_size = 1.8
+                            screw_retain_thickness = 1.8
+                            screw_retain_margin = 1.5
+                            screw_head_size = directive.head
+                            screw_shaft_length = max(
+                                screw_head_size+screw_retain_thickness,
+                                self.opt.lid_thickness
+                            )
                             # main shaft for screw hole in lid
                             self.lid -= create_screw_hole(
                                 item_pos.x,
                                 item_pos.y,
                                 radius = directive.size / 2,
-                                thickness = max(
-                                    screw_head_size+screw_retain_thickness,
-                                    self.opt.lid_thickness
-                                )
+                                thickness = screw_shaft_length
                             )
                             if directive.d2 != None:
                                 # make inset hole for screw head in lid
@@ -655,7 +665,7 @@ class KeyboardBuilder(object):
                                     item_pos.x,
                                     item_pos.y,
                                     radius = directive.d2 / 2 + screw_retain_margin,
-                                    thickness = screw_head_size + self.opt.lid_thickness,
+                                    thickness = screw_head_size + screw_retain_thickness,
                                 )
                     elif type(directive) == directives.USBCDirective:
                         # Creat a hole for a USB Type-C connector
@@ -679,35 +689,62 @@ class KeyboardBuilder(object):
                             angle=directive.r
                         )
                         if directive.top:
-                            self.case -= rect
+                            if directive.add:
+                                self.case += rect
+                            else:
+                                self.case -= rect
                         if directive.lid:
-                            self.lid -= rect
+                            if directive.add:
+                                self.lid += rect
+                            else:
+                                self.lid -= rect
                         # if directive.pcb:
                     else:
                         print("Warning> Unknown directive: {}".format(directive), file=sys.stderr)
             # Create the hole for the key switch
             self.case -= create_switch_hole(x, y, angle, top_thickness, hole_size=hole_size)
 
-        case = self.case.generate()
-        lid = self.lid.generate()
+        case = mirror([0, 1, 0])(self.case.generate())
+        lid = mirror([0, 1, 0])(self.lid.generate())
 
-        parts = part()(
-            part()(color("yellow")(case)),
-            down(self.opt.bot_thickness + self.opt.lid_thickness + 3)(
-                part()(color("red")(lid))
-            ),
+        return (case, lid)
+
+    def animate(self):
+        case, lid = self.generate()
+
+        def _animate(_time=0):
+            t = _time * 2
+            parts = part()(
+                part()(color("yellow")(case)),
+                translate([0, 0, -(self.opt.bot_thickness + (7)*t)])(
+                    part()(color("red")(lid))
+                )
+            )
+
+            return parts
+
+        scad_render_animated_file(
+            _animate,
+            steps=60,   # Number of steps to create one complete motion
+            back_and_forth=True,
+            filepath=os.path.join("test_pcb","test_anim.scad")
         )
 
-        # translate board to be centered on the origin
-        parts = translate([0, 0, 0])(parts)
+    def generate_to_file(self):
+        case, lid = self.generate()
+        parts = part()(
+            part()(color("yellow")(case)),
+            down(self.opt.bot_thickness + self.opt.lid_thickness + 7)(
+                part()(color("red")(lid))
+            )
+        )
 
-        # #
-        parts = mirror([0, 1, 0])(parts)
+        self.kb_pcb.write_to_file(os.path.join("test_pcb","test_pcb.kicad_pcb"))
+        scad_render_to_file(case, os.path.join("test_pcb","test_case.scad"), include_orig_code=False)
+        scad_render_to_file(lid,  os.path.join("test_pcb","test_lid.scad"), include_orig_code=False)
+        scad_render_to_file(parts, os.path.join("test_pcb","test_all.scad"), include_orig_code=False)
+        return parts
 
-        self.kb_pcb.write_to_file("test_pcb/test_pcb.kicad_pcb")
-        scad_render_to_file(case, "test_pcb/test_case.scad")
-        scad_render_to_file(lid, "test_pcb/test_lid.scad")
-        return scad_render(parts)
 
 
 if __name__ == "__main__":
@@ -780,10 +817,18 @@ if __name__ == "__main__":
     with open(args.kle_json_file) as json_file:
         json_layout = json.loads(json_file.read())
 
+    if isinstance(json_layout, dict):
+        opts = json_layout["options"]
+        layout = json_layout["layout"]
+        arg_str = ""
+        for key in opts:
+            arg_str +=  "--{} {} ".format(key, opts[key])
+        args = parser.parse_args(arg_str.split())
+
+        json_layout = layout
+
     kb_builder = KeyboardBuilder(json_layout, args)
-    scad_code = kb_builder.generate_str()
 
-
-    with open("test_pcb/test_plate.scad", "w") as out_file:
-        out_file.write(scad_code)
+    scad_obj = kb_builder.generate_to_file()
+    scad_code = scad_render(scad_obj)
     print(scad_code)
