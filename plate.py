@@ -99,10 +99,12 @@ def create_rect_hole(pos_x, pos_y, l, w, h, pos_z=0.0, angle=0.0):
         )
     )
 
+SCREW_SEGMENTS = 20
+
 def create_screw_hole(pos_x, pos_y, radius, thickness, pos_z=0):
 
     screw_hole = render()(
-        cylinder(r=radius, h=thickness, segments=20)
+        cylinder(r=radius, h=thickness, segments=SCREW_SEGMENTS)
     )
 
     return translate([pos_x, pos_y, pos_z])(
@@ -140,135 +142,6 @@ class HoleBuilder(object):
         return translate([pos_x, pos_y, pos_z + z_offset])(
             port_hole
         )
-
-def create_case_screw(pos_x, pos_y):
-    m3_screw_r = 3.0 / 2
-    shaft_r = 10.0 / 2
-    screw_head_r = 7.0 / 2
-    screw_head_h = 2.0
-
-    size = 3.0 # total screw assembly size
-
-    screw = cylinder(r=m3_screw_r, h=size, segments=20)
-    shaft = cylinder(r=shaft_r, h=size, segments=20)
-    counterbored_hole = cylinder(r=screw_head_r, h=screw_head_h, segments=20)
-
-    # shaft = shaft - hole()(screw, counterbored_hole)
-    shaft = shaft
-
-    add_material = translate([pos_x, pos_y, 0])(shaft)
-    del_material = translate([pos_x, pos_y, 0])(screw, counterbored_hole)
-    return (add_material, del_material)
-
-def create_power_switch_hole(pos_x, pos_y, lid_thickness):
-    # pos_x, pos_y are center of smd slider switch on pcb
-
-    w = 6.0
-    h = 2.0
-
-    slider_hole = cube([w, h, lid_thickness])
-
-    x = (pos_x - w/2)
-    y = (pos_y - h/2)
-
-    slider_body_h = 3.6
-    slider_body_w = 7.0
-    slider_switch_slider_h = 1.0
-    offset = slider_body_h/2 - slider_switch_slider_h/2
-
-    slider_hole = translate([x, y - offset, 0])(slider_hole) # move hole into position
-
-    body_hole_size = 0.8
-    body_hole_w = slider_body_w + 0.4
-    body_hole_h = slider_body_h + 0.4
-    body_x = pos_x - body_hole_w/2
-    body_y = pos_y - body_hole_h/2
-    body_z = lid_thickness - body_hole_size
-    slider_body_hole = cube([body_hole_w, body_hole_h, body_hole_size])
-    slider_body_hole = translate([body_x, body_y, body_z])(slider_body_hole)
-
-    return slider_hole + slider_body_hole
-
-def create_nrf24_hole(pos_x, pos_y, lid_thickness):
-    # pos_x, pos_y are center of smd slider switch on pcb
-
-    w = 16
-    h = 16
-
-    hole_depth = 0.8
-
-    nrf24_hole = cube([w, h, hole_depth])
-
-    x = pos_x - w/2
-    y = pos_y - h/2
-    z = lid_thickness - hole_depth
-
-    nrf24_hole = translate([x, y, z])(nrf24_hole) # move hole into position
-
-    return nrf24_hole
-
-def keyplus_mini_hole(wall_height=7, side_walls=False):
-    shell_thickness = 2
-    shell_thickness_bot = 5.40
-
-    hole_w = 25
-    hole_h = 24
-    hole_z = 7
-
-    if side_walls:
-        main_hole = hole()(cube([hole_w, hole_h, hole_z+shell_thickness_bot]))
-    else:
-        main_hole = hole()(cube([hole_w+shell_thickness+0.1, hole_h+shell_thickness+0.1, hole_z+shell_thickness_bot]))
-
-    shell = cube([hole_w+shell_thickness, hole_h+shell_thickness, hole_z+shell_thickness])
-
-
-    if side_walls:
-        shell += translate([shell_thickness/2, shell_thickness/2, shell_thickness_bot/2])(main_hole)
-    else:
-        shell += translate([0, shell_thickness/2, shell_thickness_bot/2])(main_hole)
-
-    c_w = 10
-    c_h = 3
-    c_z = 3.6
-    usb_c_hole = hole()(cube([c_w, c_h, c_z]))
-
-    w = hole_w + shell_thickness
-    # h = hole_h + shell_thickness
-    z = hole_z + shell_thickness
-    shell -= translate([w/2 - c_w/2, 0, z/2 - c_z/2])(usb_c_hole)
-
-    screw_hole_offset_x = 18.15 / 2
-    screw_hole_offset_y = 1.1 + shell_thickness
-
-    screw_hole_1 = cylinder(r=1, h=7, segments=50)
-    screw_hole_2 = cylinder(r=1, h=7, segments=50)
-
-    shell += translate([w/2 - screw_hole_offset_x, screw_hole_offset_y, 0])(hole()(screw_hole_1))
-    shell += translate([w/2 + screw_hole_offset_x, screw_hole_offset_y, 0])(hole()(screw_hole_2))
-
-    total_x = hole_w+shell_thickness
-    total_y = hole_h+shell_thickness
-    total_z = hole_z+shell_thickness
-    return translate([-total_x/2, -total_y/2, -total_z/2])(shell)
-
-def create_cr2032_hole(pos_x, pos_y):
-    thickness = 0.8
-    diam = 25
-    circle_r = diam / 2
-    hole = cylinder(r=circle_r, h=thickness)
-
-    return translate([pos_x, pos_y, 0])(hole)
-
-def create_cr2032_lid_hole(pos_x, pos_y, lid_thickness, scale=1.0):
-    thickness = 0.5
-    diam = 20.8
-    circle_r = diam / 2 * scale
-    hole = cylinder(r=circle_r, h=thickness)
-
-    z = lid_thickness - thickness
-
-    return translate([pos_x, pos_y, z])(hole)
 
 class PCBBuilder(object):
 
@@ -479,13 +352,13 @@ class KeyboardBuilder(object):
         case_path = self.edge_list_to_path(case_perimeter, outline_point_list)
         outline_poly = polygon(points=case_path)
 
-        pcb_path = self.edge_list_to_path(pcb_perimeter, outline_point_list)
+        pcb_un_inset_path = self.edge_list_to_path(pcb_perimeter, outline_point_list)
         inset_size = 2.5
 
-        pcb_path = self.inset_path(pcb_path, inset_size)
+        pcb_inset_path = self.inset_path(pcb_un_inset_path, inset_size)
 
-        self.kb_pcb.add_edge_cuts(pcb_path)
-        pcb_poly = polygon(points=pcb_path)
+        self.kb_pcb.add_edge_cuts(pcb_inset_path)
+        pcb_poly = polygon(points=pcb_inset_path)
 
         # With the case outline, start constructing the 3D shape of the case
         if self.opt.corner_type == "spherical":
@@ -514,9 +387,15 @@ class KeyboardBuilder(object):
         elif self.opt.corner_type == "cylinder":
             corner_raidus = 3
             segs = self.opt.segments
+            if self.opt.margin < 0:
+                case_outline_poly = inset(d=-self.opt.margin)(outline_poly)
+            elif self.opt.margin > 0:
+                case_outline_poly = outset(d=self.opt.margin)(outline_poly)
+            else:
+                case_outline_poly = outline_poly
             case_outline = fillet(r=corner_raidus, segments=segs)(
                 rounding(r=corner_raidus, segments=segs)(
-                    outline_poly
+                    case_outline_poly
                 )
             )
         elif self.opt.corner_type == "rectangular":
@@ -533,12 +412,19 @@ class KeyboardBuilder(object):
             lid_outline = inset(d=lid_inset,segments=self.opt.segments)(case_outline)
             self.lid += linear_extrude(self.opt.lid_thickness)(lid_outline)
             lid_cutout = linear_extrude(self.opt.lid_thickness)(lid_cutout_outline)
-        if self.opt.pcb_tolerance == 0:
-            pcb_cutout = pcb_poly
-        else:
-            pcb_cutout = outset(d=self.opt.pcb_tolerance, segments=self.opt.segments)(
-                pcb_poly
+
+        pcb_edge = (self.opt.spacing - self.opt.switch_hole_size) / 2
+        pcb_inset_outset = -pcb_edge + self.opt.pcb_margin + self.opt.pcb_tolerance
+        if pcb_inset_outset < 0:
+            pcb_cutout = inset(-pcb_inset_outset)(
+                polygon(pcb_un_inset_path)
             )
+        elif pcb_inset_outset > 0:
+            pcb_cutout = outset(pcb_inset_outset)(
+                polygon(pcb_un_inset_path)
+            )
+        elif pcb_inset_outset == 0:
+            pcb_cutout = polygon(pcb_un_inset_path)
 
         bot_case_cavity = translate([0, 0, -bot_thickness])(
             linear_extrude(bot_thickness+self.opt.pcb_tolerance_z)(
@@ -594,6 +480,7 @@ class KeyboardBuilder(object):
 
 
             for (leg_pos, legend) in key.get_legend_list():
+                directive_list = None
                 try:
                     directive_list = dParser.parse_str(legend)
                 except pyparsing.ParseException as err:
@@ -603,6 +490,9 @@ class KeyboardBuilder(object):
                 except Exception as err:
                     print("Warning: failed to parse directive: " + str(err), file=sys.stderr)
                     print(legend, file=sys.stderr)
+
+                if directive_list == None:
+                    continue
 
                 for directive in directive_list:
                     loc = directive.get_loc()
@@ -635,13 +525,13 @@ class KeyboardBuilder(object):
                                 thickness = top_thickness,
                             )
                         if directive.lid:
-                            # screw_head_size = directive.h
-                            # screw_head_size = 1.8
-                            screw_retain_thickness = 2.3
-                            screw_retain_margin = 1.5
-                            screw_head_size = directive.head
+                            screw_d = directive.size
+                            screw_retain_thickness = directive.shaft_h
+                            screw_retain_d = directive.shaft_d
+                            screw_head_h = directive.head_h
+                            screw_head_d = directive.head_d
                             screw_shaft_length = max(
-                                screw_head_size+screw_retain_thickness,
+                                screw_retain_thickness,
                                 self.opt.lid_thickness
                             )
                             # main shaft for screw hole in lid
@@ -651,21 +541,35 @@ class KeyboardBuilder(object):
                                 radius = directive.size / 2,
                                 thickness = screw_shaft_length
                             )
-                            if directive.d2 != None:
+                            if screw_head_d:
                                 # make inset hole for screw head in lid
                                 self.lid -= create_screw_hole(
                                     item_pos.x,
                                     item_pos.y,
-                                    radius = directive.d2 / 2,
-                                    thickness = screw_head_size,
+                                    radius = screw_head_d / 2,
+                                    thickness = screw_head_h,
                                 )
+
+                                if directive.cone and 1:
+                                    self.lid -= translate([
+                                            item_pos.x,
+                                            item_pos.y,
+                                            screw_head_h
+                                        ])(
+                                        cylinder(
+                                            r1 = screw_head_d/2,
+                                            r2 = screw_d/2,
+                                            h = (screw_retain_thickness-screw_head_h),
+                                            segments = SCREW_SEGMENTS
+                                        )
+                                    )
                                 # add extra material on the lid to retain the inset
                                 # screw hole
                                 self.lid += create_screw_hole(
                                     item_pos.x,
                                     item_pos.y,
-                                    radius = directive.d2 / 2 + screw_retain_margin,
-                                    thickness = screw_head_size + screw_retain_thickness,
+                                    radius = screw_retain_d / 2,
+                                    thickness = screw_retain_thickness,
                                 )
                     elif type(directive) == directives.USBCDirective:
                         # Creat a hole for a USB Type-C connector
@@ -730,7 +634,10 @@ class KeyboardBuilder(object):
             filepath=os.path.join("test_pcb","test_anim.scad")
         )
 
-    def generate_to_file(self):
+    def generate_to_file(self, file_name=None):
+        if file_name == None:
+            file_name = os.path.basename(self.opt.kle_json_file).strip(".json")
+
         case, lid = self.generate()
         parts = part()(
             part()(color("yellow")(case)),
@@ -738,11 +645,10 @@ class KeyboardBuilder(object):
                 part()(color("red")(lid))
             )
         )
-
-        self.kb_pcb.write_to_file(os.path.join("test_pcb","test_pcb.kicad_pcb"))
-        scad_render_to_file(case, os.path.join("test_pcb","test_case.scad"), include_orig_code=False)
-        scad_render_to_file(lid,  os.path.join("test_pcb","test_lid.scad"), include_orig_code=False)
-        scad_render_to_file(parts, os.path.join("test_pcb","test_all.scad"), include_orig_code=False)
+        self.kb_pcb.write_to_file( file_name+"-pcb"+".kicad_pcb")
+        scad_render_to_file(case,  file_name+"-case"+".scad", include_orig_code=False)
+        scad_render_to_file(lid,   file_name+"-lid"+".scad", include_orig_code=False)
+        scad_render_to_file(parts, file_name+"-parts"+".scad", include_orig_code=False)
         return parts
 
 
@@ -773,12 +679,15 @@ if __name__ == "__main__":
     parser.add_argument('--pcb-thickness', type=float, action='store',
                         default=1.6,
                         help='The thickness of the pcb'),
+    parser.add_argument('--pcb-margin', type=float, action='store',
+                        default=0,
+                        help='The thickness of the pcb'),
     parser.add_argument('--pcb-tolerance', type=float, action='store',
                         default=0.25,
                         help='When cutting out a region for the PCB, this much'
                         ' space is added on both sides to allow the PCB to fit.'),
     parser.add_argument('--pcb-tolerance-z', type=float, action='store',
-                        default=0.2,
+                        default=0.1,
                         help='Tolerance gap between the top of the PCB and the '
                         'switch plate.'),
     parser.add_argument('--switch-hole-size', type=float, action='store',
@@ -813,6 +722,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    base_name = os.path.basename(args.kle_json_file).strip(".json")
+    build_dir = os.path.join("build", base_name)
+    if not os.path.exists(build_dir):
+        try:
+            os.makedirs(build_dir)
+        except OSError as exc: # Guard against race condition
+            if exc.errno != errno.EEXIST:
+                raise
+
     json_layout = None
     with open(args.kle_json_file) as json_file:
         json_layout = json.loads(json_file.read())
@@ -827,8 +745,11 @@ if __name__ == "__main__":
 
         json_layout = layout
 
+
+    file_name_prefix = os.path.join(build_dir, base_name)
+
     kb_builder = KeyboardBuilder(json_layout, args)
 
-    scad_obj = kb_builder.generate_to_file()
+    scad_obj = kb_builder.generate_to_file(file_name_prefix)
+
     scad_code = scad_render(scad_obj)
-    print(scad_code)

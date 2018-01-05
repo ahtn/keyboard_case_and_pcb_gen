@@ -1,3 +1,23 @@
+{
+"options" : {
+  "pcb-thickness" : 0.8,
+  "alpha" : 0.001,
+  "pcb-alpha": 0.001,
+  "alpha-density": 4,
+  "margin": 15.0,
+  "pcb-margin" : 10,
+  "pcb-tolerance" : 0.25,
+  "pcb-tolerance-z" : 0.1,
+  "bot-thickness" : 7.3,
+  "top-thickness" : 5,
+  "corner-type" : "cylinder",
+  "segments" : 20,
+  "fast" : 1,
+  "lid-tolerance" : 0.15,
+  "lid-thickness" : 1.5
+},
+
+"layout":
 [
   [
     {
@@ -219,3 +239,4 @@
     ""
   ]
 ]
+}

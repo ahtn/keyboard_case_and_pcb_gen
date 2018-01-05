@@ -176,23 +176,29 @@ class ScrewDirective(Directive):
         "M5"   : 5.5,
         "M6"   : 6.6,
     }
+    DEFAULT_HEAD_DIAMETER = 0.0
     DEFAULT_HEAD_THICKNESS = 2.5
+    DEFAULT_HEAD_RETAIN_THICKNESS = 0.0
 
-    def __init__(self, size, d2=None, head=None, x=0, y=0, h=None, top=True,
-                 pcb=True, lid=True, loc='cc'):
+    def __init__(self, size, head_d=None, head_h=None, x=0, y=0, h=None,
+                 shaft_d=None, shaft_h=None, cone = False,
+                 top=True, pcb=True, lid=True, loc='cc'):
         if type(size) == str:
             if not size in self.SCREW_LOOKUP:
                 raise DirectiveParserError("Unknown screw size '{}'".format(size))
             size_str = size
             self.size = self.SCREW_LOOKUP[size_str]
-            if d2:
-                self.d2 = d2
+            if head_d:
+                self.head_d = head_d
             else:
-                self.d2 = self.SCREW_LOOKUP[size_str.upper()] * 2
+                self.head_d = self.SCREW_LOOKUP[size_str.upper()] * 2
         else:
             assert(size > 0)
             self.size = size
-            self.d2 = d2
+            if head_d:
+                self.head_d = head_d
+            else:
+                self.head_d = self.DEFAULT_HEAD_DIAMETER
         self.x = x
         self.y = y
         self.h = h
@@ -200,10 +206,20 @@ class ScrewDirective(Directive):
         self.lid = lid
         self.pcb = pcb
         self.loc = loc
-        if head:
-            self.head = head
+        self.cone = cone
+        if shaft_d:
+            self.shaft_d = self.shaft_d
         else:
-            self.head = self.DEFAULT_HEAD_THICKNESS
+            self.shaft_d = self.head_d + 2
+        if head_h:
+            self.head_h = head_h
+        else:
+            self.head_h = self.DEFAULT_HEAD_THICKNESS
+
+        if shaft_h:
+            self.shaft_h = shaft_h
+        else:
+            self.shaft_h = self.DEFAULT_HEAD_RETAIN_THICKNESS
 
     @staticmethod
     def from_args(args):
