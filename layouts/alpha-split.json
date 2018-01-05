@@ -10,7 +10,6 @@
   "top-thickness" : 5,
   "corner-type" : "cylinder",
   "segments" : 20,
-  "fast" : 1,
   "lid-tolerance" : 0.15,
   "lid-thickness" : 1.5
 },
@@ -20,23 +19,23 @@
   [
     "rect(5, 5, h=1.4, x=6, loc=br);rect(11, 11, h=0.9, z=0.6,x=10, top=false, lid=true, loc=br)",
     "usb_c(y=0, z=+0.8, loc=tr)",
-    "hex(4.8, r=30, h=3.5, lid=false, loc=br);screw('m3', head_h=2.8, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)",
+    "hex(4.8, r=30, h=3.5, lid=false, loc=br);screw('m3', head_h=2.3, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)",
     "usb_c(y=0, z=+0.8, loc=tr)",
-    "rect(5, 5, h=6.0, top=false,lid=true,add=true,loc=bc)",
+    "",
     ""
   ],
   [
-    "hex(4.8, r=30, h=3.5, lid=false,loc=br);screw('m3', head_h=2.8, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)",
+    "hex(4.8, r=30, h=3.5, lid=false,loc=br);screw('m3', head_h=2.3, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)",
     "rect(7, 5, h=1.4,loc=br);rect(4.5, 2.5, h=5,lid=true,top=false,loc=br);",
     "",
     "rect(7, 5, h=1.4,loc=br);",
-    "hex(4.8, r=30, h=3.5, lid=false,loc=br);screw('m3', head_h=2.8, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);screw(1.5, y=-1.0, top=false,pcb=false, loc=cl); rect(5, 5, h=6.0, top=false,lid=true,add=true, loc=bc)",
+    "hex(4.8, r=30, h=3.5, lid=false,loc=br);screw('m3', head_h=2.3, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);screw(1.5, y=-1.0, top=false,pcb=false, loc=cl)",
     ""
   ],
   [
-    "rect(5, 5, h=6.0, x=-2, top=false,lid=true,add=true, loc=br)",
+    "",
     "rect(3, 5, h=2.3, x=-1.4, loc=bc)",
-    "rect(30.5,20,h=10, z=0.6, top=false,lid=true,loc=bl);hex(4.8, r=30, h=3.5, lid=false,loc=br);screw('m3', head_h=2.8, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);rect(3, 5, h=2.3, x=+1.4,loc=bc)",
+    "rect(30.5,20,h=10, z=0.6, top=false,lid=true,loc=bl);hex(4.8, r=30, h=3.5, lid=false,loc=br);screw('m3', head_h=2.3, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);rect(3, 5, h=2.3, x=+1.4,loc=bc)",
     "",
     "",
     ""
@@ -46,7 +45,7 @@
     "",
     "",
     "",
-    "rect(5, 5, h=6.0, x=-2, top=false,lid=true,add=true,loc=tr)",
+    "",
     ""
   ]
 ]

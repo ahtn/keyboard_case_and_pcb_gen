@@ -473,6 +473,8 @@ class KeyboardBuilder(object):
             w, h = key.w(), key.h()
             angle = key.r()
 
+            key_sw_support = self.opt.lid_struts
+
             self.kb_pcb.add_switch(
                 x, y, w, h, angle,
                 spacing=spacing
@@ -542,6 +544,20 @@ class KeyboardBuilder(object):
                                 thickness = screw_shaft_length
                             )
                             if screw_head_d:
+                                self.lid -= translate([
+                                        item_pos.x,
+                                        item_pos.y,
+                                        screw_head_h
+                                    ])(
+                                    cylinder(
+                                        r1 = screw_head_d/2,
+                                        r2 = screw_d/2,
+                                        # h = (screw_retain_thickness-screw_head_h),
+                                        h = (screw_retain_thickness-screw_head_h),
+                                        segments = SCREW_SEGMENTS
+                                    )
+                                )
+
                                 # make inset hole for screw head in lid
                                 self.lid -= create_screw_hole(
                                     item_pos.x,
@@ -550,19 +566,6 @@ class KeyboardBuilder(object):
                                     thickness = screw_head_h,
                                 )
 
-                                if directive.cone and 1:
-                                    self.lid -= translate([
-                                            item_pos.x,
-                                            item_pos.y,
-                                            screw_head_h
-                                        ])(
-                                        cylinder(
-                                            r1 = screw_head_d/2,
-                                            r2 = screw_d/2,
-                                            h = (screw_retain_thickness-screw_head_h),
-                                            segments = SCREW_SEGMENTS
-                                        )
-                                    )
                                 # add extra material on the lid to retain the inset
                                 # screw hole
                                 self.lid += create_screw_hole(
@@ -603,8 +606,22 @@ class KeyboardBuilder(object):
                             else:
                                 self.lid -= rect
                         # if directive.pcb:
+                    elif isinstance(directive, directives.StrutDirective):
+                        key_sw_support = directive.is_used
                     else:
                         print("Warning> Unknown directive: {}".format(directive), file=sys.stderr)
+
+            if key_sw_support:
+                # height of switch plate affects the bottom position of the
+                # stem relative to the lid.
+                bot_of_stem_offset = self.opt.top_thickness - 5
+                stem_h = 3.3
+                # height from bottom of lid, to bottom of switch stem
+                strut_h = bot_of_stem_offset + self.opt.bot_thickness - stem_h
+                self.lid += translate([x, y, 0])(
+                    cylinder(r1 = 10/2, r2 = 5/2, h=strut_h)
+                )
+
             # Create the hole for the key switch
             self.case -= create_switch_hole(x, y, angle, top_thickness, hole_size=hole_size)
 
@@ -673,6 +690,9 @@ if __name__ == "__main__":
                         default=0.4,
                         help='Tolerance gap for fitting the lid into the '
                         'bottom of the case.'),
+    parser.add_argument('--lid-struts', type=bool, action='store',
+                        default=True,
+                        help='Add struts below key switches to support the lid'),
     parser.add_argument('--margin', type=float, action='store',
                         default=0,
                         help='Extra space added around case'),
@@ -717,7 +737,8 @@ if __name__ == "__main__":
     parser.add_argument('--segments', type=int, action='store',
                         default=20,
                         help="The type of corners to be used when constructing the case."),
-    parser.add_argument('--fast', action='store_true',
+    parser.add_argument('--fast', type=bool, action='store',
+                        default=False,
                         help="The type of corners to be used when constructing the case."),
 
     args = parser.parse_args()
@@ -738,7 +759,7 @@ if __name__ == "__main__":
     if isinstance(json_layout, dict):
         opts = json_layout["options"]
         layout = json_layout["layout"]
-        arg_str = ""
+        arg_str = args.kle_json_file + " "
         for key in opts:
             arg_str +=  "--{} {} ".format(key, opts[key])
         args = parser.parse_args(arg_str.split())

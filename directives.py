@@ -256,12 +256,22 @@ class USBCDirective(Directive):
             self.x, self.y, self.z, self.r, self.flip)
     __repr__ = __str__
 
+class StrutDirective(object):
+    def __init__(self, is_used):
+        self.is_used = is_used
+
+    @staticmethod
+    def from_args(args):
+        Directive.check_args(USBCDirective, args)
+        return USBCDirective(**args.keyword)
+
 
 directiveLookupTable = {
     'hex': HexDirective,
     'screw': ScrewDirective,
     'usb_c': USBCDirective,
     'rect': RectDirective,
+    'strut': StrutDirective,
 }
 
 class DirectiveArgs(object):
