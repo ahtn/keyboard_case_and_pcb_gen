@@ -58,7 +58,10 @@ class Point(namedtuple('Point', ('x', 'y'))):
         return math.hypot((self.x - other.x), (self.y - other.y))
 
     def normalize(self):
-        return Point(self.x, self.y) / self.magnitude()
+        if self.x == 0 and self.y == 0:
+            return Point(self.x, self.y)
+        else:
+            return Point(self.x, self.y) / self.magnitude()
 
 
 class Key(object):
