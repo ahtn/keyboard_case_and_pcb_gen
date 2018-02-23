@@ -341,7 +341,7 @@ class KeyProperties:
         return props
 
 
-class KbProperties:
+class KbProperties(object):
     """
     KbProperties apply to all subsequent keycaps
     """
@@ -403,6 +403,7 @@ class Keyboard(object):
         self.cur_x = 0
         self.cur_y = 0
         self.spacing = spacing
+        self.metadata = {}
 
     def get_keys(self):
         return iter(self.keys)
@@ -443,6 +444,11 @@ class Keyboard(object):
         props = KeyProperties()
         pos = 0
         for row in json_layout:
+            if isinstance(row, dict):
+                # Copy all the fields to the metadata
+                for key in row:
+                    keyboard.metadata[key] = row[key]
+                continue
             for key in row:
                 if type(key) == str:
                     x = props.x
