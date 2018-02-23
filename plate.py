@@ -270,9 +270,16 @@ class KeyboardBuilder(object):
             u0 = kle.Point(-v0.y, v0.x).normalize()
             u1 = kle.Point(-v1.y, v1.x).normalize()
 
+            # If one of the unit normals is zero, then the points are on top
+            # of each other. So we can skip generating a line segment.
             if u0.x == 0 and u0.y == 0:
                 continue
             if u1.x == 0 and u1.y == 0:
+                continue
+
+            # Unit normals are parallel, we can simplify the output geometry
+            # by ignoring this line segment and merging it with the next one.
+            if u0 == u1:
                 continue
 
             # if u0.cross_product(v0) > 0:
