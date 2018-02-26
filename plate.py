@@ -230,7 +230,7 @@ class KeyboardBuilder(object):
     def __init__(self, json_object, options):
         self.opt = options
 
-        self.kle_layout = kle.Keyboard.from_json(json_object, spacing=self.opt.spacing)
+        self.kle_layout = kle.KLEKeyboard.from_json(json_object, spacing=self.opt.spacing)
 
         if self.opt.fast:
             self.epsilon = 1e-4
@@ -330,10 +330,10 @@ class KeyboardBuilder(object):
 
             outline_point_set.update(set(points))
 
-            n_w = math.floor(key.u_w()) + self.opt.alpha_density
+            n_w = math.floor(key.u_w) + self.opt.alpha_density
             outline_point_set.update(add_points(points[0], points[1], n_w))
             outline_point_set.update(add_points(points[2], points[3], n_w))
-            n_h = math.floor(key.u_h()) + self.opt.alpha_density
+            n_h = math.floor(key.u_h) + self.opt.alpha_density
             outline_point_set.update(add_points(points[0], points[3], n_h))
             outline_point_set.update(add_points(points[1], points[2], n_h))
 
@@ -482,8 +482,8 @@ class KeyboardBuilder(object):
         for (i, key) in enumerate(self.kle_layout.get_keys()):
             key_pos = key.get_center()
             x, y = key_pos
-            w, h = key.w(), key.h()
-            angle = key.r()
+            w, h = key.w, key.h
+            angle = key.r
 
             key_sw_support = self.opt.lid_struts
 
