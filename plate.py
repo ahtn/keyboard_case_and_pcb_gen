@@ -92,12 +92,32 @@ def create_hex_hole(pos_x, pos_y, size, thickness, pos_z=0.0, angle=0.0):
         )
     )
 
-def create_rect_hole(pos_x, pos_y, l, w, h, pos_z=0.0, angle=0.0):
+def create_rect_hole(pos_x, pos_y, l, w, h, scale=[1.0, 1.0], pos_z=0.0, angle=0.0):
+    # return translate([pos_x, pos_y, pos_z + h/2])(
+    #     rotate([0, 0, angle])(
+    #         cube([l, w, h], center=True)
+    #     )
+    # )
+
+    rect = linear_extrude(height = h, scale=scale, center=True)(
+        square([l, w], center=True)
+    )
+
+    if scale[0] < 0:
+        rect = mirror([0, 0, 1])( rect )
+        scale[0] *= -1
+    if scale[1] < 0:
+        rect = mirror([0, 0, 1])( rect )
+        scale[1] *= -1
+
+
     return translate([pos_x, pos_y, pos_z + h/2])(
         rotate([0, 0, angle])(
-            cube([l, w, h], center=True)
+            rect
         )
     )
+
+
 
 SCREW_SEGMENTS = 20
 
@@ -604,6 +624,7 @@ class KeyboardBuilder(object):
                         rect = create_rect_hole(
                             item_pos.x, item_pos.y,
                             directive.l, directive.w, h,
+                            [directive.scalex, directive.scaley],
                             pos_z=directive.z,
                             angle=directive.r
                         )
@@ -627,9 +648,11 @@ class KeyboardBuilder(object):
                 # height of switch plate affects the bottom position of the
                 # stem relative to the lid.
                 bot_of_stem_offset = self.opt.top_thickness - 5
-                stem_h = 3.3
+                mx_leg_h = 3.3
                 # height from bottom of lid, to bottom of switch stem
-                strut_h = bot_of_stem_offset + self.opt.bot_thickness - stem_h
+                strut_h = bot_of_stem_offset + self.opt.bot_thickness - mx_leg_h
+                strut_height_adjust = self.opt.strut_height_adjust
+                strut_h += strut_height_adjust
                 self.lid += translate([x, y, 0])(
                     cylinder(r1 = 10/2, r2 = 5/2, h=strut_h)
                 )
@@ -685,6 +708,7 @@ class KeyboardBuilder(object):
 if __name__ == "__main__":
     import argparse
     import json
+    import yaml
 
     parser = argparse.ArgumentParser(description='KLE -> 3D printed plate generator')
     parser.add_argument('kle_json_file', type=str, action='store',
@@ -752,10 +776,16 @@ if __name__ == "__main__":
     parser.add_argument('--fast', type=bool, action='store',
                         default=False,
                         help="The type of corners to be used when constructing the case."),
+    parser.add_argument('--strut-height-adjust', type=float, action='store',
+                        default=0.3,
+                        help="Adjust the height of struts. Struts are supports "
+                        "added to the lid that push against the middle leg of "
+                        "a cherry switch."),
 
     args = parser.parse_args()
 
-    base_name = os.path.basename(args.kle_json_file).strip(".json")
+    base_name = os.path.basename(args.kle_json_file)
+    base_name, file_ext = os.path.splitext(base_name)
     build_dir = os.path.join("build", base_name)
     if not os.path.exists(build_dir):
         try:
@@ -766,7 +796,11 @@ if __name__ == "__main__":
 
     json_layout = None
     with open(args.kle_json_file) as json_file:
-        json_layout = json.loads(json_file.read())
+        json_file_contents = json_file.read()
+        if file_ext == ".json":
+            json_layout = json.loads(json_file_contents)
+        elif file_ext == ".yaml":
+            json_layout = yaml.load(json_file_contents)
 
     if isinstance(json_layout, dict):
         opts = json_layout["options"]

@@ -95,7 +95,7 @@ class RectDirective(Directive):
     KEYWORD = 'rect'
     NUM_POS_ARGS = 2
 
-    def __init__(self, l, w, h=None, x=0, y=0, z=0, r=0,
+    def __init__(self, l, w, h=None, x=0, y=0, z=0, r=0, scalex=1.0, scaley=1.0,
                  top=True, pcb=False, lid=False, add=False, loc='cc'):
         assert(w > 0 and l > 0 and (h==None or h>0))
         self.w = w
@@ -106,6 +106,8 @@ class RectDirective(Directive):
         self.z = z
         self.r = r
         self.h = h
+        self.scalex = scalex
+        self.scaley = scaley
         self.add = add
         self.top = top
         self.lid = lid
@@ -118,10 +120,10 @@ class RectDirective(Directive):
         return RectDirective(args.positional[0], args.positional[1], **args.keyword)
 
     def __str__(self):
-        return "RectDirective(w={}, l={}, h={}, x={}, y={}, z={}, r={})".format(
+        return "RectDirective(w={}, l={}, h={}, x={}, y={}, z={}, r={}, scale={})".format(
             self.w, self.l, self.h,
             self.x, self.y, self.z,
-            self.r
+            self.r, [self.scalex, self.scaley],
         )
     __repr__ = __str__
 
@@ -193,7 +195,7 @@ class ScrewDirective(Directive):
             else:
                 self.head_d = self.SCREW_LOOKUP[size_str.upper()] * 2
         else:
-            assert(size > 0)
+            # assert(size > 0)
             self.size = size
             if head_d:
                 self.head_d = head_d
