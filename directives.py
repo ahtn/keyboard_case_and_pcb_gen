@@ -210,7 +210,7 @@ class ScrewDirective(Directive):
         self.loc = loc
         self.cone = cone
         if shaft_d:
-            self.shaft_d = self.shaft_d
+            self.shaft_d = shaft_d
         else:
             self.shaft_d = self.head_d + 2
         if head_h:

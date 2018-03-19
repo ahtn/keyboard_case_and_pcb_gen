@@ -31,7 +31,7 @@
     # col 2
     "
     hex(4.8, r=30, h=3.5, lid=false, loc=br);
-    screw('m3', head_h=2.3, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)
+    screw('m3', head_h=2.3, shaft_d=11, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)
     ",
 
     # col 3
@@ -47,7 +47,7 @@
     # col 0, screw hole
     "
     hex(4.8, r=30, h=3.5, lid=false,loc=br);
-    screw('m3', head_h=2.3, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)
+    screw('m3', head_h=2.3, shaft_d=11, shaft_h=4.6, top=false,pcb=false,loc=br,cone=true)
     ",
 
     # col 1, power switch
@@ -64,7 +64,7 @@
 
     "
     hex(4.8, r=30, h=3.5, lid=false,loc=br);
-    screw('m3', head_h=2.3, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);
+    screw('m3', head_h=2.3, shaft_d=11, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);
     screw(1.5, y=-1.0, top=false,pcb=false, loc=cl);
     rect(5, 5, y=-1.0, z=1.0, lid=true,top=false,pcb=false, loc=cl)",
     ""
@@ -79,7 +79,7 @@
     "
     rect(30.5,20,h=10, z=0.6, top=false,lid=true,loc=bl);
     hex(4.8, r=30, h=3.5, lid=false,loc=br);
-    screw('m3', head_h=2.3, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);
+    screw('m3', head_h=2.3, shaft_d=11, shaft_h=4.6, top=false, pcb=false, loc=br, cone=true);
     rect(3, 5, h=2.3, x=+1.4,loc=bc)
     ",
 

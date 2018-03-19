@@ -697,6 +697,39 @@ class KeyboardBuilder(object):
                 part()(color("red")(lid))
             )
         )
+        if self.opt.xcuts != None:
+            xcuts = self.opt.xcuts
+            number_of_cuts = len(xcuts)
+            xcuts = ["-1000.0"] + xcuts + ["1000.0"]
+            xcuts = [float(x)*self.opt.spacing for x in xcuts]
+            number_of_segments = number_of_cuts + 1
+            for i in range(number_of_segments):
+                start_x = xcuts[i]
+                end_x = xcuts[i+1]
+                width_of_cut = end_x - start_x
+
+                part_volume = translate([start_x+width_of_cut/2, 0, 0])(
+                    cube([width_of_cut, 999999, 999999], center=True)
+                )
+
+                case_part_i = intersection()(
+                    part_volume,
+                    case
+                )
+                lid_part_i = intersection()(
+                    part_volume,
+                    lid
+                )
+                scad_render_to_file(
+                    case_part_i,
+                    "{}-case-{}.scad".format(file_name, i),
+                    include_orig_code=False
+                )
+                scad_render_to_file(
+                    lid_part_i,
+                    "{}-lid-{}.scad".format(file_name, i),
+                    include_orig_code=False
+                )
         self.kb_pcb.write_to_file( file_name+"-pcb"+".kicad_pcb")
         scad_render_to_file(case,  file_name+"-case"+".scad", include_orig_code=False)
         scad_render_to_file(lid,   file_name+"-lid"+".scad", include_orig_code=False)
@@ -781,6 +814,9 @@ if __name__ == "__main__":
                         help="Adjust the height of struts. Struts are supports "
                         "added to the lid that push against the middle leg of "
                         "a cherry switch."),
+
+    parser.add_argument('--xcuts', type=str, action='store', nargs="+",
+                        help="Slice the model into parts for 3D printing")
 
     args = parser.parse_args()
 
