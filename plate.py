@@ -20,8 +20,6 @@ import directives
 
 import pyparsing
 
-script_path = os.path.dirname(os.path.abspath(__file__))
-
 def switch_hole_local(thickness, spacing=19.0, hole_size=14.0, hole_extra=0.0):
     # switch hole
     switch_w = hole_size
@@ -168,16 +166,16 @@ class HoleBuilder(object):
 class PCBBuilder(object):
 
     def __init__(self, pcb_thickness=1.6):
-        switch      = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_NoSilk_Back.kicad_mod")))
-        switch_1    = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u1_NoSilk_Back.kicad_mod")))
-        switch_1_25 = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u1.25_NoSilk_Back.kicad_mod")))
-        switch_1_5  = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u1.5_NoSilk_Back.kicad_mod")))
-        switch_1_75 = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u1.75_NoSilk_Back.kicad_mod")))
-        switch_2    = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u2_NoSilk_Back.kicad_mod")))
-        switch_2_25 = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u2.25_NoSilk_Back.kicad_mod")))
-        switch_2_5  = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u2.5_NoSilk_Back.kicad_mod")))
-        switch_2_75 = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u2.75_NoSilk_Back.kicad_mod")))
-        switch_3    = pcbnew.Module.from_file("%s/%s"%(script_path, os.path.join("mx.pretty","Cherry_MX_Matias_u3_NoSilk_Back.kicad_mod")))
+        switch      = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_NoSilk_Back.kicad_mod"))
+        switch_1    = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1_NoSilk_Back.kicad_mod"))
+        switch_1_25 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1.25_NoSilk_Back.kicad_mod"))
+        switch_1_5  = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1.5_NoSilk_Back.kicad_mod"))
+        switch_1_75 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u1.75_NoSilk_Back.kicad_mod"))
+        switch_2    = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2_NoSilk_Back.kicad_mod"))
+        switch_2_25 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2.25_NoSilk_Back.kicad_mod"))
+        switch_2_5  = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2.5_NoSilk_Back.kicad_mod"))
+        switch_2_75 = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u2.75_NoSilk_Back.kicad_mod"))
+        switch_3    = pcbnew.Module.from_file(os.path.join("mx.pretty","Cherry_MX_Matias_u3_NoSilk_Back.kicad_mod"))
 
         self.key_footprints = {
             0:    switch,
@@ -321,7 +319,7 @@ class KeyboardBuilder(object):
         return result
 
     def generate(self, _time=0):
-        scad_morphology_path = "%s/%s"%(script_path, os.path.join("scad-utils", "morphology.scad"))
+        scad_morphology_path = os.path.join("scad-utils", "morphology.scad")
         use(scad_morphology_path)
 
         self.case = OpenSCADObjectBuilder()
@@ -685,7 +683,7 @@ class KeyboardBuilder(object):
             _animate,
             steps=60,   # Number of steps to create one complete motion
             back_and_forth=True,
-            filepath="%s/%s"%(script_path, os.path.join("test_pcb","test_anim.scad"))
+            filepath=os.path.join("test_pcb","test_anim.scad")
         )
 
     def generate_to_file(self, file_name=None):
@@ -699,6 +697,39 @@ class KeyboardBuilder(object):
                 part()(color("red")(lid))
             )
         )
+        if self.opt.xcuts != None:
+            xcuts = self.opt.xcuts
+            number_of_cuts = len(xcuts)
+            xcuts = ["-1000.0"] + xcuts + ["1000.0"]
+            xcuts = [float(x)*self.opt.spacing for x in xcuts]
+            number_of_segments = number_of_cuts + 1
+            for i in range(number_of_segments):
+                start_x = xcuts[i]
+                end_x = xcuts[i+1]
+                width_of_cut = end_x - start_x
+
+                part_volume = translate([start_x+width_of_cut/2, 0, 0])(
+                    cube([width_of_cut, 999999, 999999], center=True)
+                )
+
+                case_part_i = intersection()(
+                    part_volume,
+                    case
+                )
+                lid_part_i = intersection()(
+                    part_volume,
+                    lid
+                )
+                scad_render_to_file(
+                    case_part_i,
+                    "{}-case-{}.scad".format(file_name, i),
+                    include_orig_code=False
+                )
+                scad_render_to_file(
+                    lid_part_i,
+                    "{}-lid-{}.scad".format(file_name, i),
+                    include_orig_code=False
+                )
         self.kb_pcb.write_to_file( file_name+"-pcb"+".kicad_pcb")
         scad_render_to_file(case,  file_name+"-case"+".scad", include_orig_code=False)
         scad_render_to_file(lid,   file_name+"-lid"+".scad", include_orig_code=False)
@@ -783,6 +814,9 @@ if __name__ == "__main__":
                         help="Adjust the height of struts. Struts are supports "
                         "added to the lid that push against the middle leg of "
                         "a cherry switch."),
+
+    parser.add_argument('--xcuts', type=str, action='store', nargs="+",
+                        help="Slice the model into parts for 3D printing")
 
     args = parser.parse_args()
 
