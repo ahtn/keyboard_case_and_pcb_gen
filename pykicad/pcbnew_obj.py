@@ -532,7 +532,7 @@ class Module(PCBObjectContainer):
 
     @staticmethod
     def from_file(file_name):
-        with open(file_name) as mod_file:
+        with open(file_name, encoding="utf-8") as mod_file:
             return Module.from_str(mod_file.read())
 
 
@@ -803,5 +803,5 @@ if __name__ == "__main__":
                 newPCB += switch.place(x, y, ref=ref)
             # newPCB += smd_r.place(x, y+5)
 
-    with open("test_pcb.kicad_pcb", "w") as out_file:
+    with open("test_pcb.kicad_pcb", "w", encoding="utf-8") as out_file:
         out_file.write(newPCB.generate())

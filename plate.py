@@ -223,7 +223,7 @@ class PCBBuilder(object):
         )
 
     def write_to_file(self, file_name):
-        with open(file_name, "w") as out_file:
+        with open(file_name, "w", encoding="utf-8") as out_file:
             out_file.write(self.generate_str())
 
     def generate_str(self):
@@ -260,7 +260,7 @@ class KeyboardBuilder(object):
             self.epsilon = 0
 
     def write_to_file(self, file_name):
-        with open(file_name, "w") as out_file:
+        with open(file_name, "w", encoding="utf-8") as out_file:
             out_file.write(self.generate_str())
 
     def edge_list_to_path(self, edge_list, point_list):
@@ -833,7 +833,7 @@ if __name__ == "__main__":
                 raise
 
     json_layout = None
-    with open(args.kle_json_file) as json_file:
+    with open(args.kle_json_file, encoding="utf-8") as json_file:
         json_file_contents = json_file.read()
         if file_ext == ".json":
             json_layout = json.loads(json_file_contents)
